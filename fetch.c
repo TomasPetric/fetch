@@ -53,10 +53,14 @@ static int render_height = 36;
 
 // Returns byte length of a UTF-8 sequence from its leading byte
 static int utf8_char_len(unsigned char c) {
-  if (c < 0x80) return 1;
-  if ((c & 0xE0) == 0xC0) return 2;
-  if ((c & 0xF0) == 0xE0) return 3;
-  if ((c & 0xF8) == 0xF0) return 4;
+  if (c < 0x80)
+    return 1;
+  if ((c & 0xE0) == 0xC0)
+    return 2;
+  if ((c & 0xF0) == 0xE0)
+    return 3;
+  if ((c & 0xF8) == 0xF0)
+    return 4;
   return 1; // invalid, treat as 1
 }
 
@@ -83,7 +87,8 @@ static void parse_shading(const char *str) {
   const char *p = str;
   while (*p && shading_count < MAX_SHADING) {
     int len = utf8_char_len((unsigned char)*p);
-    if (len > 4) len = 4;
+    if (len > 4)
+      len = 4;
     // Make sure we don't read past end of string
     int actual = 0;
     while (actual < len && p[actual])
@@ -108,7 +113,8 @@ static void parse_shading(const char *str) {
 static char logo_data[MAX_LOGO_ROWS][512];
 // Parsed per-cell codepoints
 static char logo_cells[MAX_LOGO_ROWS][MAX_LOGO_COLS][5];
-static int logo_cell_color[MAX_LOGO_ROWS][MAX_LOGO_COLS]; // ANSI fg color per cell
+static int logo_cell_color[MAX_LOGO_ROWS]
+                          [MAX_LOGO_COLS]; // ANSI fg color per cell
 static int logo_cell_counts[MAX_LOGO_ROWS];
 static int logo_rows = 0;
 static int logo_cols = 0;
@@ -130,7 +136,8 @@ static void process_logo_row(int row) {
           num = num * 10 + (p[i] - '0');
           has_num = 1;
         } else if (p[i] == ';') {
-          if (has_num && ((num >= 30 && num <= 37) || num == 39 || (num >= 90 && num <= 97)))
+          if (has_num && ((num >= 30 && num <= 37) || num == 39 ||
+                          (num >= 90 && num <= 97)))
             cur_color = num;
           if (has_num && num == 0)
             cur_color = 0;
@@ -139,7 +146,8 @@ static void process_logo_row(int row) {
         }
         i++;
       }
-      if (has_num && ((num >= 30 && num <= 37) || num == 39 || (num >= 90 && num <= 97)))
+      if (has_num &&
+          ((num >= 30 && num <= 37) || num == 39 || (num >= 90 && num <= 97)))
         cur_color = num;
       if (has_num && num == 0)
         cur_color = 0;
@@ -178,73 +186,111 @@ static float char_weight_utf8(const char *ch) {
   // Single-byte ASCII
   if ((unsigned char)ch[0] < 0x80) {
     switch (ch[0]) {
-    case 'M': return 1.00f;
-    case 'N': return 0.88f;
-    case 'm': return 0.76f;
-    case 'd': return 0.66f;
-    case 'h': return 0.56f;
-    case 'b': return 0.56f;
-    case 'y': return 0.46f;
-    case 'o': return 0.38f;
-    case 'n': return 0.38f;
-    case 's': return 0.30f;
-    case '+': return 0.22f;
-    case ':': return 0.18f;
-    case '=': return 0.22f;
-    case '-': return 0.14f;
-    case '`': return 0.08f;
-    case '.': return 0.10f;
-    case '/': return 0.12f;
-    case '\'': return 0.06f;
-    case ' ': return 0.0f;
+    case 'M':
+      return 1.00f;
+    case 'N':
+      return 0.88f;
+    case 'm':
+      return 0.76f;
+    case 'd':
+      return 0.66f;
+    case 'h':
+      return 0.56f;
+    case 'b':
+      return 0.56f;
+    case 'y':
+      return 0.46f;
+    case 'o':
+      return 0.38f;
+    case 'n':
+      return 0.38f;
+    case 's':
+      return 0.30f;
+    case '+':
+      return 0.22f;
+    case ':':
+      return 0.18f;
+    case '=':
+      return 0.22f;
+    case '-':
+      return 0.14f;
+    case '`':
+      return 0.08f;
+    case '.':
+      return 0.10f;
+    case '/':
+      return 0.12f;
+    case '\'':
+      return 0.06f;
+    case ' ':
+      return 0.0f;
     default:
       // Generic: uppercase heavy, lowercase medium, punct light
-      if (ch[0] >= 'A' && ch[0] <= 'Z') return 0.80f;
-      if (ch[0] >= 'a' && ch[0] <= 'z') return 0.50f;
-      if (ch[0] >= '0' && ch[0] <= '9') return 0.40f;
+      if (ch[0] >= 'A' && ch[0] <= 'Z')
+        return 0.80f;
+      if (ch[0] >= 'a' && ch[0] <= 'z')
+        return 0.50f;
+      if (ch[0] >= '0' && ch[0] <= '9')
+        return 0.40f;
       return 0.15f;
     }
   }
 
   // Multi-byte UTF-8: compare raw bytes for common block elements
   // Full block U+2588: E2 96 88
-  if (memcmp(ch, "\xe2\x96\x88", 3) == 0) return 1.00f;
+  if (memcmp(ch, "\xe2\x96\x88", 3) == 0)
+    return 1.00f;
   // Dark shade U+2593: E2 96 93
-  if (memcmp(ch, "\xe2\x96\x93", 3) == 0) return 0.75f;
+  if (memcmp(ch, "\xe2\x96\x93", 3) == 0)
+    return 0.75f;
   // Medium shade U+2592: E2 96 92
-  if (memcmp(ch, "\xe2\x96\x92", 3) == 0) return 0.50f;
+  if (memcmp(ch, "\xe2\x96\x92", 3) == 0)
+    return 0.50f;
   // Light shade U+2591: E2 96 91
-  if (memcmp(ch, "\xe2\x96\x91", 3) == 0) return 0.25f;
+  if (memcmp(ch, "\xe2\x96\x91", 3) == 0)
+    return 0.25f;
 
   // Half blocks (U+2580-258F)
   // Upper half U+2580: E2 96 80
-  if (memcmp(ch, "\xe2\x96\x80", 3) == 0) return 0.50f;
+  if (memcmp(ch, "\xe2\x96\x80", 3) == 0)
+    return 0.50f;
   // Lower half U+2584: E2 96 84
-  if (memcmp(ch, "\xe2\x96\x84", 3) == 0) return 0.50f;
+  if (memcmp(ch, "\xe2\x96\x84", 3) == 0)
+    return 0.50f;
   // Left half U+258C: E2 96 8C
-  if (memcmp(ch, "\xe2\x96\x8c", 3) == 0) return 0.50f;
+  if (memcmp(ch, "\xe2\x96\x8c", 3) == 0)
+    return 0.50f;
   // Right half U+2590: E2 96 90
-  if (memcmp(ch, "\xe2\x96\x90", 3) == 0) return 0.50f;
+  if (memcmp(ch, "\xe2\x96\x90", 3) == 0)
+    return 0.50f;
 
   // 3/4 blocks
   // U+259B ▛: E2 96 9B
-  if (memcmp(ch, "\xe2\x96\x9b", 3) == 0) return 0.75f;
+  if (memcmp(ch, "\xe2\x96\x9b", 3) == 0)
+    return 0.75f;
   // U+259C ▜: E2 96 9C
-  if (memcmp(ch, "\xe2\x96\x9c", 3) == 0) return 0.75f;
+  if (memcmp(ch, "\xe2\x96\x9c", 3) == 0)
+    return 0.75f;
   // U+2599 ▙: E2 96 99
-  if (memcmp(ch, "\xe2\x96\x99", 3) == 0) return 0.75f;
+  if (memcmp(ch, "\xe2\x96\x99", 3) == 0)
+    return 0.75f;
   // U+259F ▟: E2 96 9F
-  if (memcmp(ch, "\xe2\x96\x9f", 3) == 0) return 0.75f;
+  if (memcmp(ch, "\xe2\x96\x9f", 3) == 0)
+    return 0.75f;
 
   // 1/4 blocks
   // U+2596 ▖: E2 96 96
-  if (memcmp(ch, "\xe2\x96\x96", 3) == 0) return 0.25f;
+  if (memcmp(ch, "\xe2\x96\x96", 3) == 0)
+    return 0.25f;
   // U+2597 ▗: E2 96 97
-  if (memcmp(ch, "\xe2\x96\x97", 3) == 0) return 0.25f;
+  if (memcmp(ch, "\xe2\x96\x97", 3) == 0)
+    return 0.25f;
   // U+2598 ▘: E2 96 98
-  if (memcmp(ch, "\xe2\x96\x98", 3) == 0) return 0.25f;
+  if (memcmp(ch, "\xe2\x96\x98", 3) == 0)
+    return 0.25f;
   // U+259D ▝: E2 96 9D
-  if (memcmp(ch, "\xe2\x96\x9d", 3) == 0) return 0.25f;
+  if (memcmp(ch, "\xe2\x96\x9d", 3) == 0)
+    return 0.25f;
 
   // Box drawing chars (U+2500-257F): E2 94 xx / E2 95 xx
   if ((unsigned char)ch[0] == 0xe2 &&
@@ -252,12 +298,15 @@ static float char_weight_utf8(const char *ch) {
     return 0.20f;
 
   // Braille (U+2800-28FF): E2 A0-A3 xx
-  if ((unsigned char)ch[0] == 0xe2 &&
-      (unsigned char)ch[1] >= 0xa0 && (unsigned char)ch[1] <= 0xa3) {
+  if ((unsigned char)ch[0] == 0xe2 && (unsigned char)ch[1] >= 0xa0 &&
+      (unsigned char)ch[1] <= 0xa3) {
     // Weight by number of dots (popcount of last byte)
     unsigned char b = (unsigned char)ch[2];
     int dots = 0;
-    while (b) { dots += b & 1; b >>= 1; }
+    while (b) {
+      dots += b & 1;
+      b >>= 1;
+    }
     return dots / 8.0f;
   }
 
@@ -384,7 +433,8 @@ static int load_logo_ff_plain(const char *name) {
 
     // Detect next logo header
     if (len > 1 && len < 40 && buf[len - 1] == ':' && logo_rows > 0 &&
-        ((buf[0] >= 'A' && buf[0] <= 'Z') || (buf[0] >= 'a' && buf[0] <= 'z'))) {
+        ((buf[0] >= 'A' && buf[0] <= 'Z') ||
+         (buf[0] >= 'a' && buf[0] <= 'z'))) {
       int is_header = 1;
       for (int i = 0; i < len; i++) {
         if (buf[i] == '\033') {
@@ -563,9 +613,28 @@ static int fetch_line_count = 0;
 
 // --- Config ---
 enum {
-  F_OS, F_HOST, F_KERNEL, F_UPTIME, F_PACKAGES, F_SHELL, F_DISPLAY, F_WM,
-  F_THEME, F_ICONS, F_FONT, F_TERMINAL, F_CPU, F_GPU, F_MEMORY, F_SWAP,
-  F_DISK, F_IP, F_BATTERY, F_LOCALE, F_COLORS, F_COUNT
+  F_OS,
+  F_HOST,
+  F_KERNEL,
+  F_UPTIME,
+  F_PACKAGES,
+  F_SHELL,
+  F_DISPLAY,
+  F_WM,
+  F_THEME,
+  F_ICONS,
+  F_FONT,
+  F_TERMINAL,
+  F_CPU,
+  F_GPU,
+  F_MEMORY,
+  F_SWAP,
+  F_DISK,
+  F_IP,
+  F_BATTERY,
+  F_LOCALE,
+  F_COLORS,
+  F_COUNT
 };
 
 static int field_enabled[F_COUNT];
@@ -573,12 +642,12 @@ static int field_order[F_COUNT];
 static int field_line[F_COUNT]; // line index for each field (-1 if not shown)
 static int current_field = -1;  // which field is currently being gathered
 static int field_count = 0;
-static int is_refresh_pass = 0; // 1 during the animation refresh tick
+static int is_refresh_pass = 0;     // 1 during the animation refresh tick
 static char label_color[16] = "35"; // default magenta
-static int config_height = 0;     // 0 = auto (match info lines)
+static int config_height = 0;       // 0 = auto (match info lines)
 static float size_scale = 1.0f;
-static float config_speed = 0.0f;    // 0 = use flag/default
-static int config_spin_x = -1;       // -1 = use flag/default
+static float config_speed = 0.0f; // 0 = use flag/default
+static int config_spin_x = -1;    // -1 = use flag/default
 static int config_spin_y = -1;
 static char config_shading[128] = "";
 static char config_separator[8] = "-";
@@ -589,26 +658,35 @@ static float light_x = 0.4082f, light_y = 0.8165f, light_z = -0.4082f;
 static const struct {
   const char *name;
   int id;
-} field_map[] = {
-    {"os", F_OS},           {"host", F_HOST},
-    {"kernel", F_KERNEL},   {"uptime", F_UPTIME},
-    {"packages", F_PACKAGES}, {"shell", F_SHELL},
-    {"display", F_DISPLAY}, {"wm", F_WM},
-    {"theme", F_THEME},     {"icons", F_ICONS},
-    {"font", F_FONT},       {"terminal", F_TERMINAL},
-    {"cpu", F_CPU},         {"gpu", F_GPU},
-    {"memory", F_MEMORY},   {"swap", F_SWAP},
-    {"disk", F_DISK},       {"ip", F_IP},
-    {"battery", F_BATTERY}, {"locale", F_LOCALE},
-    {"colors", F_COLORS},   {NULL, 0}
-};
+} field_map[] = {{"os", F_OS},
+                 {"host", F_HOST},
+                 {"kernel", F_KERNEL},
+                 {"uptime", F_UPTIME},
+                 {"packages", F_PACKAGES},
+                 {"shell", F_SHELL},
+                 {"display", F_DISPLAY},
+                 {"wm", F_WM},
+                 {"theme", F_THEME},
+                 {"icons", F_ICONS},
+                 {"font", F_FONT},
+                 {"terminal", F_TERMINAL},
+                 {"cpu", F_CPU},
+                 {"gpu", F_GPU},
+                 {"memory", F_MEMORY},
+                 {"swap", F_SWAP},
+                 {"disk", F_DISK},
+                 {"ip", F_IP},
+                 {"battery", F_BATTERY},
+                 {"locale", F_LOCALE},
+                 {"colors", F_COLORS},
+                 {NULL, 0}};
 
 static void config_defaults(void) {
   // Default order
-  int defaults[] = {F_OS, F_HOST, F_KERNEL, F_UPTIME, F_PACKAGES, F_SHELL,
-                    F_DISPLAY, F_WM, F_THEME, F_ICONS, F_FONT, F_TERMINAL,
-                    F_CPU, F_GPU, F_MEMORY, F_SWAP, F_DISK, F_IP, F_BATTERY,
-                    F_LOCALE, F_COLORS};
+  int defaults[] = {
+      F_OS,     F_HOST,  F_KERNEL, F_UPTIME, F_PACKAGES, F_SHELL,  F_DISPLAY,
+      F_WM,     F_THEME, F_ICONS,  F_FONT,   F_TERMINAL, F_CPU,    F_GPU,
+      F_MEMORY, F_SWAP,  F_DISK,   F_IP,     F_BATTERY,  F_LOCALE, F_COLORS};
   field_count = sizeof(defaults) / sizeof(defaults[0]);
   for (int i = 0; i < field_count; i++) {
     field_order[i] = defaults[i];
@@ -648,14 +726,22 @@ static void load_config(void) {
     if (strncmp(line, "label_color=", 12) == 0) {
       char *val = line + 12;
       // Accept color names or numbers
-      if (strcmp(val, "red") == 0) strcpy(label_color, "31");
-      else if (strcmp(val, "green") == 0) strcpy(label_color, "32");
-      else if (strcmp(val, "yellow") == 0) strcpy(label_color, "33");
-      else if (strcmp(val, "blue") == 0) strcpy(label_color, "34");
-      else if (strcmp(val, "magenta") == 0) strcpy(label_color, "35");
-      else if (strcmp(val, "cyan") == 0) strcpy(label_color, "36");
-      else if (strcmp(val, "white") == 0) strcpy(label_color, "37");
-      else strncpy(label_color, val, sizeof(label_color) - 1);
+      if (strcmp(val, "red") == 0)
+        strcpy(label_color, "31");
+      else if (strcmp(val, "green") == 0)
+        strcpy(label_color, "32");
+      else if (strcmp(val, "yellow") == 0)
+        strcpy(label_color, "33");
+      else if (strcmp(val, "blue") == 0)
+        strcpy(label_color, "34");
+      else if (strcmp(val, "magenta") == 0)
+        strcpy(label_color, "35");
+      else if (strcmp(val, "cyan") == 0)
+        strcpy(label_color, "36");
+      else if (strcmp(val, "white") == 0)
+        strcpy(label_color, "37");
+      else
+        strncpy(label_color, val, sizeof(label_color) - 1);
       continue;
     }
     if (strncmp(line, "height=", 7) == 0) {
@@ -666,8 +752,10 @@ static void load_config(void) {
     }
     if (strncmp(line, "size=", 5) == 0) {
       size_scale = atof(line + 5);
-      if (size_scale < 0.5f) size_scale = 0.5f;
-      if (size_scale > 5.0f) size_scale = 5.0f;
+      if (size_scale < 0.5f)
+        size_scale = 0.5f;
+      if (size_scale > 5.0f)
+        size_scale = 5.0f;
       continue;
     }
     if (strncmp(line, "speed=", 6) == 0) {
@@ -691,21 +779,37 @@ static void load_config(void) {
     if (strncmp(line, "light=", 6) == 0) {
       char *val = line + 6;
       if (strcmp(val, "top-left") == 0) {
-        light_x = 0.41f; light_y = 0.82f; light_z = -0.41f;
+        light_x = 0.41f;
+        light_y = 0.82f;
+        light_z = -0.41f;
       } else if (strcmp(val, "top-right") == 0) {
-        light_x = -0.41f; light_y = 0.82f; light_z = -0.41f;
+        light_x = -0.41f;
+        light_y = 0.82f;
+        light_z = -0.41f;
       } else if (strcmp(val, "top") == 0) {
-        light_x = 0.0f; light_y = 0.89f; light_z = -0.45f;
+        light_x = 0.0f;
+        light_y = 0.89f;
+        light_z = -0.45f;
       } else if (strcmp(val, "left") == 0) {
-        light_x = 0.82f; light_y = 0.41f; light_z = -0.41f;
+        light_x = 0.82f;
+        light_y = 0.41f;
+        light_z = -0.41f;
       } else if (strcmp(val, "right") == 0) {
-        light_x = -0.82f; light_y = 0.41f; light_z = -0.41f;
+        light_x = -0.82f;
+        light_y = 0.41f;
+        light_z = -0.41f;
       } else if (strcmp(val, "front") == 0) {
-        light_x = 0.0f; light_y = 0.0f; light_z = -1.0f;
+        light_x = 0.0f;
+        light_y = 0.0f;
+        light_z = -1.0f;
       } else if (strcmp(val, "bottom-left") == 0) {
-        light_x = 0.41f; light_y = -0.82f; light_z = -0.41f;
+        light_x = 0.41f;
+        light_y = -0.82f;
+        light_z = -0.41f;
       } else if (strcmp(val, "bottom-right") == 0) {
-        light_x = -0.41f; light_y = -0.82f; light_z = -0.41f;
+        light_x = -0.41f;
+        light_y = -0.82f;
+        light_z = -0.41f;
       }
       continue;
     }
@@ -782,7 +886,8 @@ static void gather_title(void) {
   int title_len = strlen(user) + 1 + strlen(host);
   char sep[MAX_LINE_LEN];
   int sep_char_len = strlen(config_separator);
-  if (sep_char_len == 0) sep_char_len = 1;
+  if (sep_char_len == 0)
+    sep_char_len = 1;
   int pos = 0;
   for (int i = 0; i < title_len && pos + sep_char_len < MAX_LINE_LEN; i++) {
     memcpy(sep + pos, config_separator, sep_char_len);
@@ -900,8 +1005,7 @@ static void gather_packages(void) {
   }
   // pacman (Arch)
   if (!val[0]) {
-    n = count_dir_entries(
-        "ls -d /var/lib/pacman/local/*-* 2>/dev/null");
+    n = count_dir_entries("ls -d /var/lib/pacman/local/*-* 2>/dev/null");
     if (n > 0)
       snprintf(val, sizeof(val), "%d (pacman)", n);
   }
@@ -986,19 +1090,23 @@ static void gather_shell(void) {
 
 static void gather_display(void) {
   DIR *d = opendir("/sys/class/drm");
-  if (!d) return;
+  if (!d)
+    return;
   struct dirent *ent;
   int emitted = 0;
   while ((ent = readdir(d))) {
     // Pattern: cardN-CONNECTOR (skip bare cardN and renderD*)
-    if (strncmp(ent->d_name, "card", 4) != 0) continue;
+    if (strncmp(ent->d_name, "card", 4) != 0)
+      continue;
     const char *dash = strchr(ent->d_name + 4, '-');
-    if (!dash) continue;
+    if (!dash)
+      continue;
 
     char path[256];
     snprintf(path, sizeof(path), "/sys/class/drm/%s/status", ent->d_name);
     FILE *fp = fopen(path, "r");
-    if (!fp) continue;
+    if (!fp)
+      continue;
     char status[32] = "";
     if (fgets(status, sizeof(status), fp)) {
       int l = strlen(status);
@@ -1006,11 +1114,13 @@ static void gather_display(void) {
         status[--l] = '\0';
     }
     fclose(fp);
-    if (strcmp(status, "connected") != 0) continue;
+    if (strcmp(status, "connected") != 0)
+      continue;
 
     snprintf(path, sizeof(path), "/sys/class/drm/%s/modes", ent->d_name);
     fp = fopen(path, "r");
-    if (!fp) continue;
+    if (!fp)
+      continue;
     char mode[32] = "";
     if (fgets(mode, sizeof(mode), fp)) {
       int l = strlen(mode);
@@ -1018,7 +1128,8 @@ static void gather_display(void) {
         mode[--l] = '\0';
     }
     fclose(fp);
-    if (!mode[0]) continue;
+    if (!mode[0])
+      continue;
 
     add_info("Display", "%s @ %s", dash + 1, mode);
     emitted++;
@@ -1028,13 +1139,15 @@ static void gather_display(void) {
   // Fallback for drivers that don't expose per-connector modes.
   if (!emitted) {
     FILE *fp = popen("cat /sys/class/drm/card*/modes 2>/dev/null", "r");
-    if (!fp) return;
+    if (!fp)
+      return;
     char buf[64] = "";
     if (fgets(buf, sizeof(buf), fp)) {
       int l = strlen(buf);
       while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
         buf[--l] = '\0';
-      if (buf[0]) add_info("Display", "%s", buf);
+      if (buf[0])
+        add_info("Display", "%s", buf);
     }
     pclose(fp);
   }
@@ -1045,8 +1158,8 @@ static void gather_wm(void) {
   char *wayland = getenv("WAYLAND_DISPLAY");
   char *session = getenv("XDG_SESSION_TYPE");
   char *desktop = getenv("XDG_CURRENT_DESKTOP");
-  int is_wayland = (wayland && wayland[0]) ||
-                   (session && strcmp(session, "wayland") == 0);
+  int is_wayland =
+      (wayland && wayland[0]) || (session && strcmp(session, "wayland") == 0);
 
   // Try to figure out the WM name. Process detection is most accurate
   // (e.g. dwl sets XDG_CURRENT_DESKTOP=sway for compat), so try that first.
@@ -1088,15 +1201,24 @@ static void gather_wm(void) {
       n++;
     }
     first[n] = '\0';
-    if (strcasecmp(first, "KDE") == 0) strncpy(wm, "KWin", sizeof(wm) - 1);
-    else if (strcasecmp(first, "GNOME") == 0) strncpy(wm, "Mutter", sizeof(wm) - 1);
-    else if (strcasecmp(first, "XFCE") == 0) strncpy(wm, "xfwm4", sizeof(wm) - 1);
-    else if (strcasecmp(first, "Cinnamon") == 0) strncpy(wm, "Muffin", sizeof(wm) - 1);
-    else if (strcasecmp(first, "MATE") == 0) strncpy(wm, "Marco", sizeof(wm) - 1);
-    else if (strcasecmp(first, "LXQt") == 0) strncpy(wm, "Openbox", sizeof(wm) - 1);
-    else if (strcasecmp(first, "Budgie") == 0) strncpy(wm, "Mutter", sizeof(wm) - 1);
-    else if (strcasecmp(first, "Deepin") == 0) strncpy(wm, "KWin", sizeof(wm) - 1);
-    else strncpy(wm, desktop, sizeof(wm) - 1);
+    if (strcasecmp(first, "KDE") == 0)
+      strncpy(wm, "KWin", sizeof(wm) - 1);
+    else if (strcasecmp(first, "GNOME") == 0)
+      strncpy(wm, "Mutter", sizeof(wm) - 1);
+    else if (strcasecmp(first, "XFCE") == 0)
+      strncpy(wm, "xfwm4", sizeof(wm) - 1);
+    else if (strcasecmp(first, "Cinnamon") == 0)
+      strncpy(wm, "Muffin", sizeof(wm) - 1);
+    else if (strcasecmp(first, "MATE") == 0)
+      strncpy(wm, "Marco", sizeof(wm) - 1);
+    else if (strcasecmp(first, "LXQt") == 0)
+      strncpy(wm, "Openbox", sizeof(wm) - 1);
+    else if (strcasecmp(first, "Budgie") == 0)
+      strncpy(wm, "Mutter", sizeof(wm) - 1);
+    else if (strcasecmp(first, "Deepin") == 0)
+      strncpy(wm, "KWin", sizeof(wm) - 1);
+    else
+      strncpy(wm, desktop, sizeof(wm) - 1);
   }
 
   if (wm[0])
@@ -1160,10 +1282,9 @@ static void gather_cpu(void) {
   }
 
   // Get max frequency from cpufreq
-  fp = popen(
-      "cat /sys/devices/system/cpu/cpufreq/policy*/cpuinfo_max_freq "
-      "2>/dev/null | sort -rn | head -1",
-      "r");
+  fp = popen("cat /sys/devices/system/cpu/cpufreq/policy*/cpuinfo_max_freq "
+             "2>/dev/null | sort -rn | head -1",
+             "r");
   if (fp) {
     char buf[32];
     if (fgets(buf, sizeof(buf), fp)) {
@@ -1189,11 +1310,13 @@ static void gather_cpu(void) {
 // AD106M [GeForce RTX 4070 Max-Q / Mobile] (rev a1)"
 // We prefer the bracket content; otherwise the chunk after "Corporation ".
 static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
-  if (!pci_id || !pci_id[0]) return 0;
+  if (!pci_id || !pci_id[0])
+    return 0;
   char cmd[128];
   snprintf(cmd, sizeof(cmd), "lspci -d %s 2>/dev/null", pci_id);
   FILE *fp = popen(cmd, "r");
-  if (!fp) return 0;
+  if (!fp)
+    return 0;
   char line[256];
   int ok = 0;
   if (fgets(line, sizeof(line), fp)) {
@@ -1201,7 +1324,8 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
     while (l > 0 && (line[l - 1] == '\n' || line[l - 1] == '\r'))
       line[--l] = '\0';
     char *rev = strstr(line, " (rev ");
-    if (rev) *rev = '\0';
+    if (rev)
+      *rev = '\0';
     char *lb = strrchr(line, '[');
     char *rb = strrchr(line, ']');
     const char *name = NULL;
@@ -1211,17 +1335,25 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
     } else {
       char *corp = strstr(line, " Corporation ");
       int skip = corp ? 13 : 0;
-      if (!corp) { corp = strstr(line, " Corp "); if (corp) skip = 6; }
+      if (!corp) {
+        corp = strstr(line, " Corp ");
+        if (corp)
+          skip = 6;
+      }
       // Skip past "bus:dev.fn class:" prefix even if no Corporation.
       if (!corp) {
         char *c1 = strchr(line, ':');
         if (c1) {
           char *c2 = strchr(c1 + 1, ':');
-          if (c2) { corp = c2; skip = 1; }
+          if (c2) {
+            corp = c2;
+            skip = 1;
+          }
         }
       }
       name = corp ? (corp + skip) : line;
-      while (*name == ' ') name++;
+      while (*name == ' ')
+        name++;
     }
     if (name && *name) {
       strncpy(out, name, outlen - 1);
@@ -1235,38 +1367,49 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
 
 static void gather_gpu(void) {
   DIR *d = opendir("/sys/class/drm");
-  if (!d) return;
+  if (!d)
+    return;
   struct dirent *ent;
   while ((ent = readdir(d))) {
     // Only cardN (not cardN-CONNECTOR or renderD*)
-    if (strncmp(ent->d_name, "card", 4) != 0) continue;
+    if (strncmp(ent->d_name, "card", 4) != 0)
+      continue;
     int all_digits = 1;
     for (int i = 4; ent->d_name[i]; i++) {
-      if (ent->d_name[i] < '0' || ent->d_name[i] > '9') { all_digits = 0; break; }
+      if (ent->d_name[i] < '0' || ent->d_name[i] > '9') {
+        all_digits = 0;
+        break;
+      }
     }
-    if (!all_digits) continue;
+    if (!all_digits)
+      continue;
 
     char path[256];
-    snprintf(path, sizeof(path), "/sys/class/drm/%s/device/uevent", ent->d_name);
+    snprintf(path, sizeof(path), "/sys/class/drm/%s/device/uevent",
+             ent->d_name);
     FILE *fp = fopen(path, "r");
-    if (!fp) continue;
+    if (!fp)
+      continue;
     char driver[32] = "", pci_id[16] = "", compat[64] = "";
     char buf[256];
     while (fgets(buf, sizeof(buf), fp)) {
       if (strncmp(buf, "DRIVER=", 7) == 0) {
         char *v = buf + 7;
         int l = strlen(v);
-        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r')) v[--l] = '\0';
+        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r'))
+          v[--l] = '\0';
         strncpy(driver, v, sizeof(driver) - 1);
       } else if (strncmp(buf, "PCI_ID=", 7) == 0) {
         char *v = buf + 7;
         int l = strlen(v);
-        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r')) v[--l] = '\0';
+        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r'))
+          v[--l] = '\0';
         strncpy(pci_id, v, sizeof(pci_id) - 1);
       } else if (strncmp(buf, "OF_COMPATIBLE_0=", 16) == 0) {
         char *v = buf + 16;
         int l = strlen(v);
-        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r')) v[--l] = '\0';
+        while (l > 0 && (v[l - 1] == '\n' || v[l - 1] == '\r'))
+          v[--l] = '\0';
         strncpy(compat, v, sizeof(compat) - 1);
       }
     }
@@ -1296,8 +1439,10 @@ static void gather_gpu(void) {
         }
         fclose(mfp);
       }
-      if (cpu[0]) snprintf(name, sizeof(name), "Apple %s", cpu);
-      else strcpy(name, "Apple GPU");
+      if (cpu[0])
+        snprintf(name, sizeof(name), "Apple %s", cpu);
+      else
+        strcpy(name, "Apple GPU");
       type = "Integrated";
     } else if (pci_id[0] && gpu_lookup_lspci(pci_id, name, sizeof(name))) {
       // lspci gave us a human name.
@@ -1305,20 +1450,26 @@ static void gather_gpu(void) {
       strcpy(name, "Intel Graphics");
     } else if (strcmp(driver, "amdgpu") == 0 || strcmp(driver, "radeon") == 0) {
       strcpy(name, "AMD Graphics");
-    } else if (strcmp(driver, "nvidia") == 0 || strcmp(driver, "nouveau") == 0) {
+    } else if (strcmp(driver, "nvidia") == 0 ||
+               strcmp(driver, "nouveau") == 0) {
       strcpy(name, "NVIDIA GPU");
     } else if (driver[0]) {
       strncpy(name, driver, sizeof(name) - 1);
     }
 
     if (!type[0]) {
-      if (!strcmp(driver, "i915") || !strcmp(driver, "xe")) type = "Integrated";
-      else if (!strcmp(driver, "nvidia") || !strcmp(driver, "nouveau")) type = "Discrete";
+      if (!strcmp(driver, "i915") || !strcmp(driver, "xe"))
+        type = "Integrated";
+      else if (!strcmp(driver, "nvidia") || !strcmp(driver, "nouveau"))
+        type = "Discrete";
     }
 
-    if (!name[0]) continue;
-    if (type[0]) add_info("GPU", "%s [%s]", name, type);
-    else add_info("GPU", "%s", name);
+    if (!name[0])
+      continue;
+    if (type[0])
+      add_info("GPU", "%s [%s]", name, type);
+    else
+      add_info("GPU", "%s", name);
   }
   closedir(d);
 }
@@ -1417,8 +1568,8 @@ static void gather_disk(void) {
     add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s",
              used_gib, total_gib, color, pct, fstype);
   else
-    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)",
-             used_gib, total_gib, color, pct);
+    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)", used_gib,
+             total_gib, color, pct);
 }
 
 static void gather_battery(void) {
@@ -1585,8 +1736,8 @@ static void gather_terminal(void) {
 }
 
 static void gather_ip(void) {
-  FILE *fp = popen("ip -4 -o addr show scope global 2>/dev/null | head -1",
-                   "r");
+  FILE *fp =
+      popen("ip -4 -o addr show scope global 2>/dev/null | head -1", "r");
   if (!fp)
     return;
   char buf[256];
@@ -1783,8 +1934,10 @@ static void build_points(void) {
             float fc = (float)sc / subdiv;
             int nr = row + (sr > 0 ? 1 : 0);
             int nc = col + (sc > 0 ? 1 : 0);
-            if (nr >= logo_rows) nr = logo_rows - 1;
-            if (nc >= logo_cols) nc = logo_cols - 1;
+            if (nr >= logo_rows)
+              nr = logo_rows - 1;
+            if (nc >= logo_cols)
+              nc = logo_cols - 1;
             float h00 = hmap[row][col];
             float h10 = hmap[nr][col];
             float h01 = hmap[row][nc];
@@ -1795,57 +1948,63 @@ static void build_points(void) {
               continue;
           }
 
-      float ox = (fcol - cx) * sx;
-      float oy = (cy - frow) * sy;
-      float zr = ih * zmax;
+          float ox = (fcol - cx) * sx;
+          float oy = (cy - frow) * sy;
+          float zr = ih * zmax;
 
-      for (int k = 0; k < Z_LAYERS; k++) {
-        if (idx >= MAX_POINTS)
-          break;
-        float t = ((float)k / (Z_LAYERS - 1)) - 0.5f;
-        PX[idx] = ox;
-        PY[idx] = oy;
-        PZ[idx] = t * 2.0f * zr;
-        PWEIGHT[idx] = ih;
-        PCOLOR[idx] = logo_cell_color[row][col];
+          // Skip side layers for very light cells — they create
+          // wispy "tail" artifacts at edges during rotation
+          int layers = Z_LAYERS;
+          if (ih < 0.15f)
+            layers = 2; // front + back only
 
-        if (k == 0) {
-          NX[idx] = gnx[row][col];
-          NY[idx] = gny[row][col];
-          NZ[idx] = -gnz[row][col];
-        } else if (k == Z_LAYERS - 1) {
-          NX[idx] = gnx[row][col];
-          NY[idx] = gny[row][col];
-          NZ[idx] = gnz[row][col];
-        } else {
-          float ex = 0, ey = 0;
-          for (int dr = -1; dr <= 1; dr++) {
-            for (int dc = -1; dc <= 1; dc++) {
-              if (dr == 0 && dc == 0)
-                continue;
-              int nr = row + dr, nc = col + dc;
-              float nh = 0;
-              if (nr >= 0 && nr < logo_rows && nc >= 0 && nc < logo_cols)
-                nh = hmap[nr][nc];
-              if (nh < h) {
-                ex += (float)dc;
-                ey += (float)(-dr);
+          for (int k = 0; k < layers; k++) {
+            if (idx >= MAX_POINTS)
+              break;
+            float t = ((float)k / (layers - 1)) - 0.5f;
+            PX[idx] = ox;
+            PY[idx] = oy;
+            PZ[idx] = t * 2.0f * zr;
+            PWEIGHT[idx] = ih;
+            PCOLOR[idx] = logo_cell_color[row][col];
+
+            if (k == 0) {
+              NX[idx] = gnx[row][col];
+              NY[idx] = gny[row][col];
+              NZ[idx] = -gnz[row][col];
+            } else if (k == layers - 1) {
+              NX[idx] = gnx[row][col];
+              NY[idx] = gny[row][col];
+              NZ[idx] = gnz[row][col];
+            } else {
+              float ex = 0, ey = 0;
+              for (int dr = -1; dr <= 1; dr++) {
+                for (int dc = -1; dc <= 1; dc++) {
+                  if (dr == 0 && dc == 0)
+                    continue;
+                  int nr = row + dr, nc = col + dc;
+                  float nh = 0;
+                  if (nr >= 0 && nr < logo_rows && nc >= 0 && nc < logo_cols)
+                    nh = hmap[nr][nc];
+                  if (nh < h) {
+                    ex += (float)dc;
+                    ey += (float)(-dr);
+                  }
+                }
               }
+              float el = sqrtf(ex * ex + ey * ey);
+              if (el > 1e-6f) {
+                ex /= el;
+                ey /= el;
+              }
+              float tn = ((float)k / (layers - 1)) * 2.0f - 1.0f;
+              float side = sqrtf(1.0f - tn * tn);
+              NX[idx] = ex * side;
+              NY[idx] = ey * side;
+              NZ[idx] = tn;
             }
+            idx++;
           }
-          float el = sqrtf(ex * ex + ey * ey);
-          if (el > 1e-6f) {
-            ex /= el;
-            ey /= el;
-          }
-          float tn = ((float)k / (Z_LAYERS - 1)) * 2.0f - 1.0f;
-          float side = sqrtf(1.0f - tn * tn);
-          NX[idx] = ex * side;
-          NY[idx] = ey * side;
-          NZ[idx] = tn;
-        }
-        idx++;
-      }
         }
       }
     }
@@ -1927,51 +2086,61 @@ int main(int argc, char **argv) {
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-      printf("Usage: fetch [options]\n\n"
-             "Options:\n"
-             "  -l, --logo <name>         Use a logo from fastfetch by name\n"
-             "                            Any logo fastfetch supports works, e.g.:\n"
-             "                              gentoo, arch, nixos, debian, ubuntu,\n"
-             "                              fedora, void, alpine, opensuse, manjaro,\n"
-             "                              proxmox, pop, linuxmint, endeavouros...\n"
-             "                            Run 'fastfetch --list-logos' to see all\n"
-             "  --rotate-x                Lock rotation to X axis only\n"
-             "  --rotate-y                Lock rotation to Y axis only\n"
-             "  -s, --speed <float>       Speed multiplier (default 1.0)\n"
-             "  --size <float>            Scale the logo (e.g. 2.0 for double size)\n"
-             "  --height <n>              Override render height in rows\n"
-             "  --no-info                 Just the logo, no system info\n"
-             "  --no-color                Disable logo coloring\n"
-             "  --frames <n>              Stop after n frames (default 2000)\n"
-             "  --infinite                Run forever (keypress or Ctrl-C to exit)\n"
-             "  --shading-chars <str>     Custom shading ramp, supports UTF-8\n"
-             "                            Default: .,-~:;=!*#$@\n"
-             "                            Example: ' ░▒▓█'\n"
-             "  -h, --help                Show this help\n\n"
-             "Config: ~/.config/fetch/config\n"
-             "  List field names to show (in order), one per line.\n"
-             "  Comment out or remove fields to hide them.\n"
-             "  Available fields:\n"
-             "    os, host, kernel, uptime, packages, shell, display, wm,\n"
-             "    theme, icons, font, terminal, cpu, gpu, memory, swap,\n"
-             "    disk, ip, battery, locale, colors\n\n"
-             "  Settings:\n"
-             "    label_color=<color>      Label color (red, green, yellow, blue,\n"
-             "                             magenta, cyan, white, or ANSI number)\n"
-             "    separator=<char>         Title separator character\n"
-             "    shading=<str>            Shading ramp characters\n"
-             "    light=<dir>              Light direction (top-left, top-right, top,\n"
-             "                             left, right, front, bottom-left, bottom-right)\n"
-             "    spin=<axes>              Rotation axes (x, y, or xy)\n"
-             "    speed=<float>            Rotation speed\n"
-             "    size=<float>             Logo scale\n"
-             "    height=<n>               Render height in rows\n\n"
-             "Logo: ~/.config/fetch/logo.txt\n"
-             "  Custom ASCII/Unicode logo. Add '# distro: <name>' as the\n"
-             "  first line to set the color scheme.\n");
+      printf(
+          "Usage: fetch [options]\n\n"
+          "Options:\n"
+          "  -l, --logo <name>         Use a logo from fastfetch by name\n"
+          "                            Any logo fastfetch supports works, "
+          "e.g.:\n"
+          "                              gentoo, arch, nixos, debian, ubuntu,\n"
+          "                              fedora, void, alpine, opensuse, "
+          "manjaro,\n"
+          "                              proxmox, pop, linuxmint, "
+          "endeavouros...\n"
+          "                            Run 'fastfetch --list-logos' to see "
+          "all\n"
+          "  --rotate-x                Lock rotation to X axis only\n"
+          "  --rotate-y                Lock rotation to Y axis only\n"
+          "  -s, --speed <float>       Speed multiplier (default 1.0)\n"
+          "  --size <float>            Scale the logo (e.g. 2.0 for double "
+          "size)\n"
+          "  --height <n>              Override render height in rows\n"
+          "  --no-info                 Just the logo, no system info\n"
+          "  --no-color                Disable logo coloring\n"
+          "  --frames <n>              Stop after n frames (default 2000)\n"
+          "  --infinite                Run forever (keypress or Ctrl-C to "
+          "exit)\n"
+          "  --shading-chars <str>     Custom shading ramp, supports UTF-8\n"
+          "                            Default: .,-~:;=!*#$@\n"
+          "                            Example: ' ░▒▓█'\n"
+          "  -h, --help                Show this help\n\n"
+          "Config: ~/.config/fetch/config\n"
+          "  List field names to show (in order), one per line.\n"
+          "  Comment out or remove fields to hide them.\n"
+          "  Available fields:\n"
+          "    os, host, kernel, uptime, packages, shell, display, wm,\n"
+          "    theme, icons, font, terminal, cpu, gpu, memory, swap,\n"
+          "    disk, ip, battery, locale, colors\n\n"
+          "  Settings:\n"
+          "    label_color=<color>      Label color (red, green, yellow, "
+          "blue,\n"
+          "                             magenta, cyan, white, or ANSI number)\n"
+          "    separator=<char>         Title separator character\n"
+          "    shading=<str>            Shading ramp characters\n"
+          "    light=<dir>              Light direction (top-left, top-right, "
+          "top,\n"
+          "                             left, right, front, bottom-left, "
+          "bottom-right)\n"
+          "    spin=<axes>              Rotation axes (x, y, or xy)\n"
+          "    speed=<float>            Rotation speed\n"
+          "    size=<float>             Logo scale\n"
+          "    height=<n>               Render height in rows\n\n"
+          "Logo: ~/.config/fetch/logo.txt\n"
+          "  Custom ASCII/Unicode logo. Add '# distro: <name>' as the\n"
+          "  first line to set the color scheme.\n");
       return 0;
     } else if ((strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) &&
-        i + 1 < argc) {
+               i + 1 < argc) {
       logo_name = argv[++i];
     } else if (strcmp(argv[i], "--rotate-x") == 0) {
       rotate_x = 1;
@@ -1979,7 +2148,8 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[i], "--rotate-y") == 0) {
       rotate_x = 0;
       rotate_y = 1;
-    } else if ((strcmp(argv[i], "--speed") == 0 || strcmp(argv[i], "-s") == 0) &&
+    } else if ((strcmp(argv[i], "--speed") == 0 ||
+                strcmp(argv[i], "-s") == 0) &&
                i + 1 < argc) {
       speed = atof(argv[++i]);
     } else if (strcmp(argv[i], "--no-info") == 0) {
@@ -2139,8 +2309,10 @@ int main(int argc, char **argv) {
   if (render_height > MAX_HEIGHT)
     render_height = MAX_HEIGHT;
 
-  // Cap to terminal height if we can detect it
+  // Cap to terminal height if we can detect it (leave 1 row margin)
   int term_rows = get_term_rows();
+  if (term_rows > 1)
+    term_rows--;
   if (term_rows > 0 && render_height > term_rows)
     render_height = term_rows;
 
@@ -2179,7 +2351,10 @@ int main(int argc, char **argv) {
     if (term_resized) {
       term_resized = 0;
       int new_rows = get_term_rows();
-      if (new_rows > 0) {
+      // Leave 1 row margin to prevent scroll-jitter
+      if (new_rows > 1)
+        new_rows--;
+      if (new_rows > 0 && new_rows != render_height) {
         render_height = new_rows;
         if (render_height > MAX_HEIGHT)
           render_height = MAX_HEIGHT;
@@ -2275,8 +2450,9 @@ int main(int argc, char **argv) {
         if (ci >= shading_count)
           ci = shading_count - 1;
         memcpy(screen[ys][xs], shading_chars[ci], 5);
-        colorbuf[ys][xs] = logo_has_ansi ? PCOLOR[i]
-                            : ((PWEIGHT[i] >= color_threshold) ? 1 : 0);
+        colorbuf[ys][xs] = logo_has_ansi
+                               ? PCOLOR[i]
+                               : ((PWEIGHT[i] >= color_threshold) ? 1 : 0);
       }
     }
 
