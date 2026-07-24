@@ -213,6 +213,7 @@ colors
 # label_color=magenta   (red, green, yellow, blue, magenta, cyan, white)
 # separator=─           (character for the title separator)
 # shading=.,-~:;=!*#$@  (characters for 3D shading, supports UTF-8)
+# box=0                 (adds a box around the system-data, 0 = off, 1 = on)
 
 # logo colors (override distro defaults)
 # logo_outer=magenta    (outer/heavy character color)
