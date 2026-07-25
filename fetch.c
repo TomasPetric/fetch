@@ -1352,9 +1352,12 @@ static void gather_packages(void) {
   }
   // xbps (Void)
   if (!val[0]) {
-    n = count_subdirs("/var/db/xbps");
-    if (n > 0)
-      snprintf(val, sizeof(val), "%d (xbps)", n);
+    FILE *fp = popen("xbps-query -l 2>/dev/null | wc -l", "r");
+    if (fp) {
+      if (fscanf(fp, "%d", &n) == 1 && n > 0)
+        snprintf(val, sizeof(val), "%d (xbps)", n);
+      pclose(fp);
+    }
   }
   // apk (Alpine)
   if (!val[0]) {
