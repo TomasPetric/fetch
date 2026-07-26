@@ -6,7 +6,7 @@ A donut.c-inspired fetch tool that spins your distro logo in 3D with live-updati
 
 Takes any ASCII/Unicode distro logo, turns each character into a point cloud
 based on its visual density, and renders it as a rotating 3D relief with
-Blinn-Phong shading. System info is gathered natively — no external
+Blinn-Phong shading. System info is gathered natively – no external
 dependencies required. Works on Linux and macOS.
 
 Based on [gentoo.c](https://github.com/areofyl/gentoo.c).
@@ -18,7 +18,7 @@ make
 ./fetch
 ```
 
-Press any key to stop — the keypress passes through to the shell, so it
+Press any key to stop – the keypress passes through to the shell, so it
 works as a startup fetch. Ctrl-C works too.
 
 ## Install
@@ -159,7 +159,7 @@ Without fastfetch, the built-in Gentoo logo is used.
 
 ## System info
 
-All system info is gathered natively — no fastfetch or neofetch needed:
+All system info is gathered natively – no fastfetch or neofetch needed:
 
 - **OS** - `/etc/os-release`
 - **Host** - `/proc/device-tree/model` or `/sys/class/dmi/id/product_name`
@@ -173,7 +173,7 @@ All system info is gathered natively — no fastfetch or neofetch needed:
 - **CPU** - `/proc/cpuinfo`, device-tree (Apple Silicon), or `sysctl` (macOS)
 - **GPU** - DRM + `lspci` for full names (Linux), `system_profiler` (macOS)
 - **Memory/Swap** - `/proc/meminfo` (Linux), `vm_stat` (macOS)
-- **Disk** - `statvfs()` + `/proc/mounts` (Linux), `getmntinfo` (macOS)
+- **Disk** - `statvfs()` + `/proc/mounts` (Linux), `getmntinfo` (macOS) – supports multiple mount points via config
 - **Battery** - `energy_now/energy_full` (Linux), IOKit (macOS)
 - **Packages** - emerge, pacman, dpkg, rpm/dnf, xbps, apk, flatpak, brew
 - **Local IP** - `getifaddrs()`
@@ -185,7 +185,7 @@ Stats like memory, battery, and uptime update in real-time while the logo spins.
 Create `~/.config/fetch/config` to customize:
 
 ```
-# fields — list to show, in this order
+# fields – list to show, in this order
 # remove or comment out to hide
 os
 host
@@ -208,6 +208,10 @@ ip
 battery
 locale
 colors
+
+# extra disks (add more mount points)
+# disk=/home
+# disk=/data
 
 # appearance
 # label_color=magenta   (red, green, yellow, blue, magenta, cyan, white)
