@@ -787,6 +787,9 @@ static char config_separator[8] = "-";
 static float config_depth = 1.0f;
 static char config_logo_outer[32] = "";
 static char config_logo_inner[32] = "";
+#define MAX_EXTRA_DISKS 8
+static char extra_disks[MAX_EXTRA_DISKS][128];
+static int extra_disk_count = 0;
 
 // Light direction presets
 static float light_x = 0.4082f, light_y = 0.8165f, light_z = -0.4082f;
@@ -984,6 +987,23 @@ static void load_config(void) {
         light_x = -0.41f;
         light_y = -0.82f;
         light_z = -0.41f;
+      }
+      continue;
+    }
+
+    // disk=/path — add extra mount point
+    if (strncasecmp(line, "disk=", 5) == 0) {
+      char *path = line + 5;
+      if (*path && extra_disk_count < MAX_EXTRA_DISKS) {
+        strncpy(extra_disks[extra_disk_count], path,
+                sizeof(extra_disks[0]) - 1);
+        extra_disks[extra_disk_count][sizeof(extra_disks[0]) - 1] = '\0';
+        extra_disk_count++;
+      }
+      // also enable disk field if not already
+      if (!field_enabled[F_DISK] && field_count < F_COUNT) {
+        field_enabled[F_DISK] = 1;
+        field_order[field_count++] = F_DISK;
       }
       continue;
     }
@@ -2090,9 +2110,11 @@ static void gather_swap(void) {
 #endif
 }
 
-static void gather_disk(void) {
+static void gather_disk_one(const char *path) {
   struct statvfs st;
-  if (statvfs("/", &st) != 0)
+  if (statvfs(path, &st) != 0)
+    return;
+  if (st.f_blocks == 0)
     return;
 
   float total_gib = (float)st.f_blocks * (float)st.f_frsize / (1024 * 1024 * 1024);
@@ -2101,33 +2123,27 @@ static void gather_disk(void) {
   int pct = (int)(used_gib * 100 / total_gib);
   const char *color = pct >= 80 ? "31" : pct >= 50 ? "93" : "32";
 
-#ifdef __APPLE__
+  char label[64];
+  snprintf(label, sizeof(label), "Disk (%s)", path);
+
   char fstype[32] = "";
+#ifdef __APPLE__
   struct statfs *mnts;
   int count = getmntinfo(&mnts, MNT_NOWAIT);
   for (int i = 0; i < count; i++) {
-    if (strcmp(mnts[i].f_mntonname, "/") == 0) {
+    if (strcmp(mnts[i].f_mntonname, path) == 0) {
       strncpy(fstype, mnts[i].f_fstypename, sizeof(fstype) - 1);
       break;
     }
   }
-  if (fstype[0])
-    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s",
-             used_gib, total_gib, color, pct, fstype);
-  else
-    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)", used_gib,
-             total_gib, color, pct);
 #else
-  // Get filesystem type from /proc/mounts
-  char fstype[32] = "";
   FILE *fp = fopen("/proc/mounts", "r");
   if (fp) {
     char buf[512];
     while (fgets(buf, sizeof(buf), fp)) {
-      // Format: device mountpoint fstype options ...
       char dev[128], mnt[128], fs[32];
       if (sscanf(buf, "%127s %127s %31s", dev, mnt, fs) == 3) {
-        if (strcmp(mnt, "/") == 0) {
+        if (strcmp(mnt, path) == 0) {
           strncpy(fstype, fs, sizeof(fstype) - 1);
           break;
         }
@@ -2135,14 +2151,20 @@ static void gather_disk(void) {
     }
     fclose(fp);
   }
+#endif
 
   if (fstype[0])
-    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s",
+    add_info(label, "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s",
              used_gib, total_gib, color, pct, fstype);
   else
-    add_info("Disk (/)", "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)", used_gib,
+    add_info(label, "%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)", used_gib,
              total_gib, color, pct);
-#endif
+}
+
+static void gather_disk(void) {
+  gather_disk_one("/");
+  for (int i = 0; i < extra_disk_count; i++)
+    gather_disk_one(extra_disks[i]);
 }
 
 static void gather_battery(void) {
@@ -2942,6 +2964,9 @@ int main(int argc, char **argv) {
           "    os, host, kernel, uptime, packages, shell, display, wm,\n"
           "    theme, icons, font, terminal, cpu, gpu, memory, swap,\n"
           "    disk, ip, battery, locale, colors\n\n"
+          "  Extra disks:\n"
+          "    disk=/home               Show additional mount point\n"
+          "    disk=/data               (repeat for multiple mounts)\n\n"
           "  Settings:\n"
           "    label_color=<color>      Label color (red, green, yellow, "
           "blue,\n"
