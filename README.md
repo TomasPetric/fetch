@@ -263,8 +263,32 @@ If you want to chat about ideas before writing code, reach out on
 
 ## How it works
 
-Each character in the logo gets a weight based on its visual density (`M` is
-heavy, `.` is light, `█` is full, `░` is thin), and that weight becomes a height,
-turning the flat logo into a 3D relief. Surface normals come from the height
-gradient, and everything gets rotated + projected + shaded every frame with a
-z-buffer. Single file C, no deps beyond libm.
+1. **Logo loading** – reads ASCII/Unicode art from `~/.config/fetch/logo.txt` or
+   grabs a distro logo via fastfetch. ANSI color codes are parsed and preserved
+   per-character.
+
+2. **Heightmap** – each character gets a weight based on visual density (`@` is
+   heavy, `.` is light, `█` is full, `░` is thin). The weight becomes a Z height,
+   turning the flat logo into a 3D relief map. Logos with low height variance
+   (uniform characters) get their depth auto-scaled so they don't look flat.
+
+3. **Point cloud** – the heightmap is sampled into 3D points. Interior cells get
+   multiple Z layers for a solid extrusion, edge cells get only front and back
+   faces to keep outlines clean.
+
+4. **Surface normals** – computed from the height gradient at each cell using
+   finite differences, giving each point a direction for lighting.
+
+5. **Rotation + projection** – every frame, all points are rotated around X/Y
+   axes, then perspective-projected onto the terminal grid with a z-buffer to
+   handle occlusion.
+
+6. **Shading** – Blinn-Phong lighting (diffuse + specular) maps each visible
+   point to a character from a shading ramp (`.,-~:;=!*#$@` by default). The
+   original logo colors are applied via ANSI escapes.
+
+7. **Rendering** – the entire frame is written in a single `write()` syscall to
+   avoid flicker. System info is displayed alongside the animation and
+   fast-changing fields (uptime, memory, swap) update live every second.
+
+Single file C, no dependencies beyond libm.
