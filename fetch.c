@@ -785,6 +785,7 @@ static int config_box = 0;        // 0 = off (default), 1 = on
 static char config_shading[128] = "";
 static char config_separator[8] = "-";
 static float config_depth = 1.0f;
+static int depth_user_set = 0;
 static char config_logo_outer[32] = "";
 static char config_logo_inner[32] = "";
 #define MAX_EXTRA_DISKS 8
@@ -927,6 +928,7 @@ static void load_config(void) {
       config_depth = atof(line + 6);
       if (config_depth < 0.1f) config_depth = 0.1f;
       if (config_depth > 10.0f) config_depth = 10.0f;
+      depth_user_set = 1;
       continue;
     }
     if (strncmp(line, "logo_outer=", 11) == 0) {
@@ -2675,7 +2677,6 @@ static void build_points(void) {
   const float sy = 0.14f;
   const float cx = (logo_cols - 1) * 0.5f;
   const float cy = (logo_rows - 1) * 0.5f;
-  const float zmax = 0.18f * config_depth;
   int Z_LAYERS = (int)(6 * size_scale);
   if (Z_LAYERS < 6)
     Z_LAYERS = 6;
@@ -2698,6 +2699,34 @@ static void build_points(void) {
         hmap[r][c] = 0.0f;
     }
   }
+
+  // Auto-scale depth when user hasn't set it explicitly.
+  // Logos with low height variance look flat — boost depth to compensate.
+  if (!depth_user_set) {
+    float sum = 0, sum2 = 0;
+    int n = 0;
+    for (int r = 0; r < logo_rows; r++)
+      for (int c = 0; c < logo_cols; c++)
+        if (hmap[r][c] > 0.0f) {
+          sum += hmap[r][c];
+          sum2 += hmap[r][c] * hmap[r][c];
+          n++;
+        }
+    if (n > 0) {
+      float mean = sum / n;
+      float variance = sum2 / n - mean * mean;
+      float stddev = sqrtf(variance > 0 ? variance : 0);
+      // stddev ranges ~0.05 (flat/uniform) to ~0.3 (high contrast).
+      // Scale depth inversely: flat logos get up to 3x depth boost.
+      if (stddev < 0.25f) {
+        float boost = 1.0f + 2.0f * (0.25f - stddev) / 0.25f;
+        config_depth *= boost;
+      }
+    }
+  }
+
+  const float zmax = 0.18f * config_depth;
+
   for (int r = 0; r < logo_rows; r++) {
     for (int c = 0; c < logo_cols; c++) {
       if (hmap[r][c] <= 0.0f) {
@@ -3024,6 +3053,7 @@ int main(int argc, char **argv) {
         config_depth = 0.1f;
       if (config_depth > 10.0f)
         config_depth = 10.0f;
+      depth_user_set = 1;
     }
   }
 
