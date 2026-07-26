@@ -2954,6 +2954,7 @@ int main(int argc, char **argv) {
   int use_color = 1;
   int max_frames = 2000;
   const char *shading = ".,-~:;=!*#$@";
+  int box_flag = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -2985,6 +2986,7 @@ int main(int argc, char **argv) {
           "  --shading-chars <str>     Custom shading ramp, supports UTF-8\n"
           "                            Default: .,-~:;=!*#$@\n"
           "                            Example: ' ░▒▓█'\n"
+          "  --box                     Draw a border box around the info block\n"
           "  -h, --help                Show this help\n\n"
           "Config: ~/.config/fetch/config\n"
           "  List field names to show (in order), one per line.\n"
@@ -3010,6 +3012,7 @@ int main(int argc, char **argv) {
           "    speed=<float>            Rotation speed\n"
           "    size=<float>             Logo scale\n"
           "    height=<n>               Render height in rows\n\n"
+          "    box=<0/1>                Draw a border box around the info block\n\n"
           "Logo: ~/.config/fetch/logo.txt\n"
           "  Custom ASCII/Unicode logo. Add '# distro: <name>' as the\n"
           "  first line to set the color scheme.\n");
@@ -3054,6 +3057,8 @@ int main(int argc, char **argv) {
       if (config_depth > 10.0f)
         config_depth = 10.0f;
       depth_user_set = 1;
+    } else if (strcmp(argv[i], "--box") == 0) {
+      box_flag = 1;
     }
   }
 
@@ -3071,6 +3076,8 @@ int main(int argc, char **argv) {
     rotate_x = config_spin_x;
     rotate_y = config_spin_y;
   }
+  if (box_flag)
+    config_box = 1;
 
   if (logo_name) {
     if (!load_logo_fastfetch(logo_name))
