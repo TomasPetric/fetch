@@ -101,6 +101,20 @@ static int skip_ansi(const char *p) {
   return i;
 }
 
+// Strip a trailing " (...)" documentation hint, e.g. from a config value
+// like "white (red, green, yellow, ...)" -> "white". Also trims any
+// trailing whitespace left after the cut.
+static void strip_inline_hint(char *val) {
+  char *paren = strstr(val, " (");
+  if (paren)
+    *paren = '\0';
+  int len = strlen(val);
+  while (len > 0 && (val[len - 1] == ' ' || val[len - 1] == '\t')) {
+    val[len - 1] = '\0';
+    len--;
+  }
+}
+
 // Visible columns of a string, ignoring ANSI escapes (codepoint = 1 column)
 static int visible_width(const char *s) {
   int w = 0;
@@ -865,6 +879,7 @@ static void load_config(void) {
     // Check for key=value settings
     if (strncmp(line, "label_color=", 12) == 0) {
       char *val = line + 12;
+      strip_inline_hint(val);
       // Accept color names or numbers
       if (strcmp(val, "red") == 0)
         strcpy(label_color, "31");
@@ -885,13 +900,17 @@ static void load_config(void) {
       continue;
     }
     if (strncmp(line, "height=", 7) == 0) {
-      config_height = atoi(line + 7);
+      char *val = line + 7;
+      strip_inline_hint(val);
+      config_height = atoi(val);
       if (config_height > MAX_HEIGHT)
         config_height = MAX_HEIGHT;
       continue;
     }
     if (strncmp(line, "size=", 5) == 0) {
-      size_scale = atof(line + 5);
+      char *val = line + 5;
+      strip_inline_hint(val);
+      size_scale = atof(val);
       if (size_scale < 0.5f)
         size_scale = 0.5f;
       if (size_scale > 5.0f)
@@ -899,17 +918,21 @@ static void load_config(void) {
       continue;
     }
     if (strncmp(line, "speed=", 6) == 0) {
-      config_speed = atof(line + 6);
+      char *val = line + 6;
+      strip_inline_hint(val);
+      config_speed = atof(val);
       continue;
     }
     if (strncmp(line, "spin=", 5) == 0) {
       char *val = line + 5;
+      strip_inline_hint(val);
       config_spin_x = (strchr(val, 'x') || strchr(val, 'X')) ? 1 : 0;
       config_spin_y = (strchr(val, 'y') || strchr(val, 'Y')) ? 1 : 0;
       continue;
     }
     if (strncmp(line, "box=", 4) == 0) {
       char *val = line + 4;
+      strip_inline_hint(val);
       config_box = (strcmp(val, "1") == 0 || strcasecmp(val, "y") == 0 ||
                     strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
                        ? 1
@@ -917,15 +940,19 @@ static void load_config(void) {
       continue;
     }
     if (strncmp(line, "shading=", 8) == 0) {
-      strncpy(config_shading, line + 8, sizeof(config_shading) - 1);
+      char *val = line + 8; // note: no strip_inline_hint() here to allow freeform shading strings
+      strncpy(config_shading, val, sizeof(config_shading) - 1);
       continue;
     }
     if (strncmp(line, "separator=", 10) == 0) {
-      strncpy(config_separator, line + 10, sizeof(config_separator) - 1);
+      char *val = line + 10; // note: no strip_inline_hint() here to allow freeform separator strings
+      strncpy(config_separator, val, sizeof(config_separator) - 1);
       continue;
     }
     if (strncmp(line, "depth=", 6) == 0) {
-      config_depth = atof(line + 6);
+      char *val = line + 6;
+      strip_inline_hint(val);
+      config_depth = atof(val);
       if (config_depth < 0.1f) config_depth = 0.1f;
       if (config_depth > 10.0f) config_depth = 10.0f;
       depth_user_set = 1;
@@ -933,6 +960,7 @@ static void load_config(void) {
     }
     if (strncmp(line, "logo_outer=", 11) == 0) {
       char *val = line + 11;
+      strip_inline_hint(val);
       if (strcmp(val, "red") == 0) snprintf(config_logo_outer, sizeof(config_logo_outer), "\033[1;31m");
       else if (strcmp(val, "green") == 0) snprintf(config_logo_outer, sizeof(config_logo_outer), "\033[1;32m");
       else if (strcmp(val, "yellow") == 0) snprintf(config_logo_outer, sizeof(config_logo_outer), "\033[1;33m");
@@ -945,6 +973,7 @@ static void load_config(void) {
     }
     if (strncmp(line, "logo_inner=", 11) == 0) {
       char *val = line + 11;
+      strip_inline_hint(val);
       if (strcmp(val, "red") == 0) snprintf(config_logo_inner, sizeof(config_logo_inner), "\033[1;31m");
       else if (strcmp(val, "green") == 0) snprintf(config_logo_inner, sizeof(config_logo_inner), "\033[1;32m");
       else if (strcmp(val, "yellow") == 0) snprintf(config_logo_inner, sizeof(config_logo_inner), "\033[1;33m");
@@ -957,6 +986,7 @@ static void load_config(void) {
     }
     if (strncmp(line, "light=", 6) == 0) {
       char *val = line + 6;
+      strip_inline_hint(val);
       if (strcmp(val, "top-left") == 0) {
         light_x = 0.41f;
         light_y = 0.82f;
@@ -995,7 +1025,7 @@ static void load_config(void) {
 
     // disk=/path — add extra mount point
     if (strncasecmp(line, "disk=", 5) == 0) {
-      char *path = line + 5;
+      char *path = line + 5; // note: no strip_inline_hint() here to allow spaces in path
       if (*path && extra_disk_count < MAX_EXTRA_DISKS) {
         strncpy(extra_disks[extra_disk_count], path,
                 sizeof(extra_disks[0]) - 1);
