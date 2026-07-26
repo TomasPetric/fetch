@@ -3054,9 +3054,6 @@ int main(int argc, char **argv) {
       printf("fetch %s \"%s\" (%s, %s)\n", FETCH_VERSION, FETCH_CODENAME,
              FETCH_ARCH, FETCH_OS);
       return 0;
-    } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
-      printf("fetch v%s\n", FETCH_VERSION);
-      return 0;
     } else if ((strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) &&
                i + 1 < argc) {
       logo_name = argv[++i];
@@ -3099,6 +3096,9 @@ int main(int argc, char **argv) {
       depth_user_set = 1;
     } else if (strcmp(argv[i], "--box") == 0) {
       box_flag = 1;
+    } else {
+      fprintf(stderr, "unknown option: %s\nTry 'fetch --help'\n", argv[i]);
+      return 1;
     }
   }
 
