@@ -3047,7 +3047,12 @@ int main(int argc, char **argv) {
           "    box=<0/1>                Draw a border box around the info block\n\n"
           "Logo: ~/.config/fetch/logo.txt\n"
           "  Custom ASCII/Unicode logo. Add '# distro: <name>' as the\n"
-          "  first line to set the color scheme.\n");
+          "  first line to set the color scheme.\n"
+          "  -V, --version             Show version\n");
+      return 0;
+    } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
+      printf("fetch %s \"%s\" (%s, %s)\n", FETCH_VERSION, FETCH_CODENAME,
+             FETCH_ARCH, FETCH_OS);
       return 0;
     } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
       printf("fetch v%s\n", FETCH_VERSION);
