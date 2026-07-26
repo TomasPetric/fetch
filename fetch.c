@@ -101,6 +101,20 @@ static int skip_ansi(const char *p) {
   return i;
 }
 
+// Strip a trailing " (...)" documentation hint, e.g. from a config value
+// like "white (red, green, yellow, ...)" -> "white". Also trims any
+// trailing whitespace left after the cut.
+static void strip_inline_hint(char *val) {
+  char *paren = strstr(val, " (");
+  if (paren)
+    *paren = '\0';
+  int len = strlen(val);
+  while (len > 0 && (val[len - 1] == ' ' || val[len - 1] == '\t')) {
+    val[len - 1] = '\0';
+    len--;
+  }
+}
+
 // Visible columns of a string, ignoring ANSI escapes (codepoint = 1 column)
 static int visible_width(const char *s) {
   int w = 0;
