@@ -249,6 +249,7 @@ colors
 | `--infinite` | Run forever |
 | `--shading-chars <str>` | Custom shading ramp, supports UTF-8 |
 | `-h`, `--help` | Show help |
+| `-V`, `--version` | Show version |
 
 CLI flags override config file settings.
 
