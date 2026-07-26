@@ -72,6 +72,7 @@ static int layout_stacked = 0;      // info below the logo instead of beside it
 static int info_clip_cols = -1;     // clip info lines to this many visible columns
 static int stacked_info_rows = 0;   // info lines shown in stacked layout
 #define PI 3.14159265f
+#define FETCH_VERSION "2.2.1"
 
 // --- UTF-8 helpers ---
 
@@ -3017,6 +3018,7 @@ int main(int argc, char **argv) {
           "                            Default: .,-~:;=!*#$@\n"
           "                            Example: ' ░▒▓█'\n"
           "  --box                     Draw a border box around the info block\n"
+          "  -V, --version             Show version\n"
           "  -h, --help                Show this help\n\n"
           "Config: ~/.config/fetch/config\n"
           "  List field names to show (in order), one per line.\n"
@@ -3046,6 +3048,9 @@ int main(int argc, char **argv) {
           "Logo: ~/.config/fetch/logo.txt\n"
           "  Custom ASCII/Unicode logo. Add '# distro: <name>' as the\n"
           "  first line to set the color scheme.\n");
+      return 0;
+    } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
+      printf("fetch v%s\n", FETCH_VERSION);
       return 0;
     } else if ((strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) &&
                i + 1 < argc) {
