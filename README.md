@@ -216,12 +216,13 @@ colors
 # appearance
 # label_color=magenta   (red, green, yellow, blue, magenta, cyan, white)
 # separator=─           (character for the title separator)
+# shading_mode=sextants (sextants, blocks or ascii)
 # shading=.,-~:;=!*#$@  (characters for 3D shading, supports UTF-8)
 # box=0                 (adds a box around the system-data, 0 = off, 1 = on)
 
 # logo colors (override distro defaults)
-# logo_outer=magenta    (outer/heavy character color)
-# logo_inner=white      (inner/light character color)
+# logo_outer=magenta    (extruded side color)
+# logo_inner=white      (front/back face color)
 
 # 3d
 # light=top-left        (top-left, top-right, top, left, right, front, bottom-left, bottom-right)
@@ -248,6 +249,7 @@ colors
 | `--no-color` | Disable coloring |
 | `--frames <n>` | Stop after n frames |
 | `--infinite` | Run forever |
+| `--shading-mode <mode>` | `sextants`, `blocks` or `ascii` (default: best the terminal can render) |
 | `--shading-chars <str>` | Custom shading ramp, supports UTF-8 |
 | `-h`, `--help` | Show help |
 | `-V`, `--version` | Show version |
@@ -287,9 +289,18 @@ For a deep dive with visuals and code, see the [full blog post](https://areofyl.
    axes, then perspective-projected onto the terminal grid with a z-buffer to
    handle occlusion.
 
-6. **Shading** – Blinn-Phong lighting (diffuse + specular) maps each visible
-   point to a character from a shading ramp (`.,-~:;=!*#$@` by default). The
-   original logo colors are applied via ANSI escapes.
+6. **Shading** – Blinn-Phong lighting (diffuse + specular) gives every visible
+   point a brightness. Coverage is sampled finer than the character cell –
+   2×3 for sextants, 2×2 for blocks – and each cell picks whichever glyph
+   carries the right amount of ink: a shade block (`░▒▓█`) where the cell is
+   filled, a partial block where the silhouette cuts through it. So an edge
+   lands on a fraction of a cell instead of snapping to the character grid.
+   ASCII mode skips the sub-sampling and maps brightness straight onto
+   `.,-~:;=!*#$@`.
+
+   Logos that ship their own colors keep them. The rest are two-toned by
+   surface: front and back faces in `logo_inner`, extruded sides in
+   `logo_outer`.
 
 7. **Rendering** – the entire frame is written in a single `write()` syscall to
    avoid flicker. System info is displayed alongside the animation and
