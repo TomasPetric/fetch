@@ -265,6 +265,8 @@ If you want to chat about ideas before writing code, reach out on
 
 ## How it works
 
+For a deep dive with visuals and code, see the [full blog post](https://areofyl.github.io/blog/post.html?p=how-fetch-works).
+
 1. **Logo loading** – reads ASCII/Unicode art from `~/.config/fetch/logo.txt` or
    grabs a distro logo via fastfetch. ANSI color codes are parsed and preserved
    per-character.
