@@ -256,6 +256,23 @@ colors
 
 CLI flags override config file settings.
 
+## Shading modes
+
+ASCII is the default. The sub-cell modes are opt-in, and trade the donut.c look
+for a silhouette that lands on a fraction of a cell instead of snapping to the
+character grid.
+
+| `ascii` (default) | `blocks` | `sextants` |
+|:---:|:---:|:---:|
+| ![ascii](docs/shading-ascii.png) | ![blocks](docs/shading-blocks.png) | ![sextants](docs/shading-sextants.png) |
+| brightness mapped onto `.,-~:;=!*#$@`, one character per cell | coverage sampled 2×2, edges on quadrants | coverage sampled 2×3, edges on block sextants |
+
+`sextants` needs a terminal that draws the Symbols for Legacy Computing block
+(kitty, Ghostty, foot and WezTerm do it themselves, so the font does not matter);
+`blocks` works anywhere with a UTF-8 locale.
+
+Same logo, same frame, same terminal palette in all three.
+
 ## Contributing
 
 PRs are welcome! If you want to add a feature, fix a bug, or package fetch for
