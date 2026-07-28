@@ -172,6 +172,49 @@ static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
   return p;
 }
 
+// Built-in ramps. The ASCII one bottoms out at '.' and ',', so dimly lit parts
+// of the logo turn into scattered specks and the shape reads as half there.
+// The block ramp keeps ink in every cell it covers, so the silhouette stays
+// solid no matter how the light falls.
+#define RAMP_ASCII ".,-~:;=!*#$@"
+#define RAMP_BLOCKS "░▒▓█"
+
+// Coverage is sampled on a grid finer than the character cell and collapsed
+// into one glyph, which puts the silhouette edge on a fraction of a cell
+// instead of snapping it to the character grid. 1x1 is the plain path, 2x2
+// picks a quadrant, 2x3 a block sextant.
+#define MAX_SUB_ROWS 3
+#define MAX_SUB_COLS 2
+static int sub_rows = 1;
+static int sub_cols = 1;
+
+// Quadrants by coverage mask, bit 0 top-left through bit 3 bottom-right
+static const char *const quadrant_glyphs[16] = {" ", "▘", "▝", "▀", "▖", "▌",
+                                                "▞", "▛", "▗", "▚", "▐", "▜",
+                                                "▄", "▙", "▟", "█"};
+
+// Sextants run U+1FB00..U+1FB3B in mask order (bit 0 top-left through bit 5
+// bottom-right), skipping the two masks Unicode already had as half blocks.
+// Too new for most fonts, though kitty, Ghostty, foot and WezTerm draw the
+// legacy computing block themselves.
+static char sextant_glyphs[64][5];
+
+static void build_sextant_glyphs(void) {
+  for (int mask = 1; mask < 63; mask++) {
+    if (mask == 21 || mask == 42) {
+      strcpy(sextant_glyphs[mask], mask == 21 ? "▌" : "▐");
+      continue;
+    }
+    unsigned cp = 0x1FB00u + mask - 1 - (mask > 21) - (mask > 42);
+    char *g = sextant_glyphs[mask];
+    g[0] = (char)(0xF0 | (cp >> 18));
+    g[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    g[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    g[3] = (char)(0x80 | (cp & 0x3F));
+    g[4] = '\0';
+  }
+}
+
 // Parse a UTF-8 string into individual codepoints
 #define MAX_SHADING 64
 static char shading_chars[MAX_SHADING][5];
@@ -198,6 +241,29 @@ static void parse_shading(const char *str) {
     strcpy(shading_chars[0], ".");
     shading_count = 1;
   }
+}
+
+// mode is ascii/blocks/sextants, or NULL for the ascii default. The sub-cell
+// modes are opt-in: ascii is the look, not a fallback. chars overrides the
+// mode's ramp with a literal one. Returns 0 on an unknown mode.
+static int select_shading(const char *mode, const char *chars) {
+  if (!mode)
+    mode = "ascii";
+  if (strcmp(mode, "sextants") == 0) {
+    sub_cols = 2;
+    sub_rows = 3;
+    build_sextant_glyphs();
+  } else if (strcmp(mode, "blocks") == 0) {
+    sub_cols = 2;
+    sub_rows = 2;
+  } else if (strcmp(mode, "ascii") != 0) {
+    return 0;
+  }
+  if (chars)
+    parse_shading(chars);
+  else
+    parse_shading(strcmp(mode, "ascii") == 0 ? RAMP_ASCII : RAMP_BLOCKS);
+  return 1;
 }
 
 #ifdef __APPLE__
@@ -747,10 +813,11 @@ static void load_default_logo(void) {
   }
 }
 
-#define MAX_POINTS 80000
+// Headroom for the opt-in sub-cell modes, which sample a finer grid and so
+// need more points to fill it: sextants at --size 3 land near 150k
+#define MAX_POINTS 200000
 static float PX[MAX_POINTS], PY[MAX_POINTS], PZ[MAX_POINTS];
 static float NX[MAX_POINTS], NY[MAX_POINTS], NZ[MAX_POINTS];
-static float PWEIGHT[MAX_POINTS];
 static int PCOLOR[MAX_POINTS];
 static int POINT_COUNT = 0;
 
@@ -800,6 +867,7 @@ static int config_spin_x = -1;    // -1 = use flag/default
 static int config_spin_y = -1;
 static int config_box = 0;        // 0 = off (default), 1 = on
 static char config_shading[128] = "";
+static char config_shading_mode[16] = "";
 static char config_separator[8] = "-";
 static float config_depth = 1.0f;
 static int depth_user_set = 0;
@@ -945,6 +1013,12 @@ static void load_config(void) {
     if (strncmp(line, "shading=", 8) == 0) {
       char *val = line + 8; // note: no strip_inline_hint() here to allow freeform shading strings
       strncpy(config_shading, val, sizeof(config_shading) - 1);
+      continue;
+    }
+    if (strncmp(line, "shading_mode=", 13) == 0) {
+      char *val = line + 13;
+      strip_inline_hint(val);
+      strncpy(config_shading_mode, val, sizeof(config_shading_mode) - 1);
       continue;
     }
     if (strncmp(line, "separator=", 10) == 0) {
@@ -2602,16 +2676,61 @@ static void gather_font(void) {
 #endif
 }
 
-// Render buffers: shade index (-1 = empty, 0..smax = shading char), z-buffer, color
-static signed char shade_idx[MAX_HEIGHT][ANIM_WIDTH];
-static float zbuf[MAX_HEIGHT][ANIM_WIDTH];
-static int colorbuf[MAX_HEIGHT][ANIM_WIDTH];
+// Render buffers, one entry per sub-cell: z-buffer (0 = empty), luminance, color
+#define SUB_H (MAX_HEIGHT * MAX_SUB_ROWS)
+#define SUB_W (ANIM_WIDTH * MAX_SUB_COLS)
+static float zbuf[SUB_H][SUB_W];
+static float lumbuf[SUB_H][SUB_W];
+static int colorbuf[SUB_H][SUB_W];
 
 static void clear_buf(void) {
-  int n = render_height * ANIM_WIDTH;
-  memset(shade_idx, -1, n);
+  int n = render_height * sub_rows * SUB_W;
   memset(zbuf, 0, n * sizeof(float));
+  memset(lumbuf, 0, n * sizeof(float));
   memset(colorbuf, 0, n * sizeof(int));
+}
+
+// Collapse one cell's sub-samples into a glyph, comparing the two ways the
+// cell can be drawn against the ink it should carry: the sub-cell block is
+// always full ink over the part it covers, the ramp spreads a lighter shade
+// over the whole cell. Picking by ink keeps crisp edges where the surface is
+// lit and stops dim edges from ringing the logo in a bright outline.
+// Returns NULL for an empty cell.
+static const char *cell_glyph(int row, int col, int smax, int *color_out) {
+  int x0 = col * sub_cols, y0 = row * sub_rows;
+  int total = sub_rows * sub_cols;
+  int mask = 0, bit = 0, n = 0;
+  float lsum = 0.0f, best = 0.0f;
+  for (int sr = 0; sr < sub_rows; sr++) {
+    for (int sc = 0; sc < sub_cols; sc++, bit++) {
+      float z = zbuf[y0 + sr][x0 + sc];
+      if (z <= 0.0f)
+        continue;
+      mask |= 1 << bit;
+      lsum += lumbuf[y0 + sr][x0 + sc];
+      n++;
+      if (z > best) {
+        best = z;
+        *color_out = colorbuf[y0 + sr][x0 + sc];
+      }
+    }
+  }
+  if (!n)
+    return NULL;
+
+  float coverage = (float)n / total;
+  float ink = lsum / n * coverage;
+  // Round to the nearest step: truncating biases every cell one level lighter
+  // and leaves the top of the ramp unreachable
+  int ci = (int)(ink * smax + 0.5f);
+  if (ci < 0)
+    ci = 0;
+  if (ci > smax)
+    ci = smax;
+  if (mask != (1 << total) - 1 &&
+      fabsf(coverage - ink) <= fabsf((ci + 1.0f) / shading_count - ink))
+    return sub_rows == 3 ? sextant_glyphs[mask] : quadrant_glyphs[mask];
+  return shading_chars[ci];
 }
 
 // Sizing + layout, shared by startup and SIGWINCH so a resize reproduces
@@ -2795,10 +2914,11 @@ static void build_points(void) {
     }
   }
 
-  // Subdivide grid for larger sizes to avoid gaps
-  int subdiv = (int)size_scale;
-  if (subdiv < 1)
-    subdiv = 1;
+  // Subdivide grid for larger sizes to avoid gaps. Sub-cell modes sample a
+  // finer grid, so they need proportionally more points to fill it.
+  int subdiv = (int)(size_scale * sub_rows);
+  if (subdiv < sub_rows)
+    subdiv = sub_rows;
 
   int idx = 0;
   for (int row = 0; row < logo_rows; row++) {
@@ -2862,8 +2982,13 @@ static void build_points(void) {
             PX[idx] = ox;
             PY[idx] = oy;
             PZ[idx] = t * 2.0f * zr;
-            PWEIGHT[idx] = ih;
-            PCOLOR[idx] = logo_cell_color[row][col];
+            // Uncolored logos are two-toned by which surface the point sits
+            // on: the front and back faces take the inner color, the extruded
+            // sides the outer one. Keying it off the source character weight
+            // instead, as this used to, splits logos wherever their ASCII art
+            // happens to change density — which is nowhere in particular.
+            PCOLOR[idx] = logo_has_ansi ? logo_cell_color[row][col]
+                                        : (k == 0 || k == layers - 1);
 
             if (k == 0) {
               NX[idx] = gnx[row][col];
@@ -2911,25 +3036,6 @@ static void build_points(void) {
   free(gnx);
   free(gny);
   free(gnz);
-}
-
-static float color_threshold = 0.5f;
-
-static int float_cmp(const void *a, const void *b) {
-  float fa = *(const float *)a, fb = *(const float *)b;
-  return (fa > fb) - (fa < fb);
-}
-
-static void compute_threshold(void) {
-  if (POINT_COUNT == 0)
-    return;
-  float *sorted = malloc(POINT_COUNT * sizeof(float));
-  if (!sorted)
-    return;
-  memcpy(sorted, PWEIGHT, POINT_COUNT * sizeof(float));
-  qsort(sorted, POINT_COUNT, sizeof(float), float_cmp);
-  color_threshold = sorted[POINT_COUNT / 2];
-  free(sorted);
 }
 
 // Default colors: bold magenta (outer) + bold white (inner)
@@ -2986,7 +3092,8 @@ int main(int argc, char **argv) {
   int show_info = 1;
   int use_color = 1;
   int max_frames = 2000;
-  const char *shading = ".,-~:;=!*#$@";
+  const char *shading = NULL;
+  const char *shading_mode = NULL;
   int box_flag = 0;
 
   for (int i = 1; i < argc; i++) {
@@ -3016,9 +3123,11 @@ int main(int argc, char **argv) {
           "  --frames <n>              Stop after n frames (default 2000)\n"
           "  --infinite                Run forever (keypress or Ctrl-C to "
           "exit)\n"
+          "  --shading-mode <mode>     ascii (.,-~:;=!*#$@, the default), or "
+          "opt into\n"
+          "                            sub-cell blocks: sextants (2x3) or "
+          "blocks (2x2)\n"
           "  --shading-chars <str>     Custom shading ramp, supports UTF-8\n"
-          "                            Default: .,-~:;=!*#$@\n"
-          "                            Example: ' ░▒▓█'\n"
           "  --box                     Draw a border box around the info block\n"
           "  -V, --version             Show version\n"
           "  -h, --help                Show this help\n\n"
@@ -3037,6 +3146,7 @@ int main(int argc, char **argv) {
           "blue,\n"
           "                             magenta, cyan, white, or ANSI number)\n"
           "    separator=<char>         Title separator character\n"
+          "    shading_mode=<mode>      ascii (default), blocks or sextants\n"
           "    shading=<str>            Shading ramp characters\n"
           "    light=<dir>              Light direction (top-left, top-right, "
           "top,\n"
@@ -3055,9 +3165,6 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
       printf("fetch %s \"%s\" (%s, %s)\n", FETCH_VERSION, FETCH_CODENAME,
              FETCH_ARCH, FETCH_OS);
-      return 0;
-    } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
-      printf("fetch v%s\n", FETCH_VERSION);
       return 0;
     } else if ((strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) &&
                i + 1 < argc) {
@@ -3082,6 +3189,8 @@ int main(int argc, char **argv) {
       max_frames = 0;
     } else if (strcmp(argv[i], "--shading-chars") == 0 && i + 1 < argc) {
       shading = argv[++i];
+    } else if (strcmp(argv[i], "--shading-mode") == 0 && i + 1 < argc) {
+      shading_mode = argv[++i];
     } else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
       config_height = atoi(argv[++i]);
       if (config_height > MAX_HEIGHT)
@@ -3101,17 +3210,25 @@ int main(int argc, char **argv) {
       depth_user_set = 1;
     } else if (strcmp(argv[i], "--box") == 0) {
       box_flag = 1;
+    } else {
+      fprintf(stderr, "unknown option: %s\nTry 'fetch --help'\n", argv[i]);
+      return 1;
     }
   }
 
-  // Parse shading ramp into codepoints
-  parse_shading(shading);
   config_defaults();
   load_config();
 
-  // Config overrides for shading, speed, spin (CLI flags take priority)
-  if (config_shading[0])
-    parse_shading(config_shading);
+  // Shading: CLI flags, then config, then the ascii default
+  if (!shading && config_shading[0])
+    shading = config_shading;
+  if (!shading_mode && config_shading_mode[0])
+    shading_mode = config_shading_mode;
+  if (!select_shading(shading_mode, shading)) {
+    fprintf(stderr, "unknown shading mode: %s\nTry 'fetch --help'\n",
+            shading_mode);
+    return 1;
+  }
   if (config_speed > 0 && speed == 1.0f)
     speed = config_speed;
   if (config_spin_x >= 0 && rotate_x == 1 && rotate_y == 1) {
@@ -3220,7 +3337,6 @@ int main(int argc, char **argv) {
   apply_layout(show_info);
 
   build_points();
-  compute_threshold();
 
   float A = 0.0f;
   float B = 0.0f;
@@ -3325,9 +3441,10 @@ int main(int argc, char **argv) {
       if (zc < 0.1f)
         continue;
       float ooz = 1.0f / zc;
-      int xs = (int)(half_aw + k1x2 * x2 * ooz);
-      int ys = (int)(y_center - K1 * y2 * ooz);
-      if (xs < 0 || xs >= aw || ys < 0 || ys >= render_height)
+      int xs = (int)((half_aw + k1x2 * x2 * ooz) * sub_cols);
+      int ys = (int)((y_center - K1 * y2 * ooz) * sub_rows);
+      if (xs < 0 || xs >= aw * sub_cols || ys < 0 ||
+          ys >= render_height * sub_rows)
         continue;
 
       if (ooz > zbuf[ys][xs]) {
@@ -3347,13 +3464,8 @@ int main(int argc, char **argv) {
           L = 1.0f;
 
         zbuf[ys][xs] = ooz;
-        int ci = (int)(L * smax);
-        if (ci < 0) ci = 0;
-        if (ci > smax) ci = smax;
-        shade_idx[ys][xs] = ci;
-        colorbuf[ys][xs] = logo_has_ansi
-                               ? PCOLOR[i]
-                               : ((PWEIGHT[i] >= color_threshold) ? 1 : 0);
+        lumbuf[ys][xs] = L;
+        colorbuf[ys][xs] = PCOLOR[i];
       }
     }
 
@@ -3388,10 +3500,10 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < render_height && p + 8 < end; i++) {
       if (!use_color) {
-        for (int j = 0; j < aw && p + 4 < end; j++) {
-          int ci = shade_idx[i][j];
-          if (ci < 0) { *p++ = ' '; continue; }
-          const char *sc = shading_chars[ci];
+        for (int j = 0; j < aw && p + 8 < end; j++) {
+          int c = 0;
+          const char *sc = cell_glyph(i, j, smax, &c);
+          if (!sc) { *p++ = ' '; continue; }
           int k = 0;
           while (k < 4 && sc[k]) { p[k] = sc[k]; k++; }
           p += k ? k : 1;
@@ -3399,15 +3511,15 @@ int main(int argc, char **argv) {
       } else {
         int prev_color = -1;
         for (int j = 0; j < aw && p + 16 < end; j++) {
-          int ci = shade_idx[i][j];
-          if (ci < 0) {
+          int c = 0;
+          const char *sc = cell_glyph(i, j, smax, &c);
+          if (!sc) {
             if (prev_color != -1) {
               memcpy(p, reset_seq, 4); p += 4;
               prev_color = -1;
             }
             *p++ = ' ';
           } else {
-            int c = colorbuf[i][j];
             if (c != prev_color) {
               if (logo_has_ansi && c > 0 && c < 128) {
                 // Build ANSI escape lazily on first use
@@ -3424,7 +3536,6 @@ int main(int argc, char **argv) {
               }
               prev_color = c;
             }
-            const char *sc = shading_chars[ci];
             int k = 0;
             while (k < 4 && sc[k]) { p[k] = sc[k]; k++; }
             p += k ? k : 1;
