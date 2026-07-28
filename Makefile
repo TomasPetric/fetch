@@ -3,7 +3,8 @@ CFLAGS ?= -O2
 PREFIX ?= /usr/local
 LDFLAGS ?=
 LDLIBS = -lm
-VERSION ?= 2.2.1
+VERSION := $(shell cat VERSION)
+CPPFLAGS += -DFETCH_VERSION=\"$(VERSION)\"
 CODENAME ?= Overclocked ASCII
 
 UNAME_S := $(shell uname -s)
