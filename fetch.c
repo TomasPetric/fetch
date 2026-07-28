@@ -193,6 +193,8 @@ static const char *const quadrant_glyphs[16] = {" ", "▘", "▝", "▀", "▖",
 
 // Sextants run U+1FB00..U+1FB3B in mask order (bit 0 top-left through bit 5
 // bottom-right), skipping the two masks Unicode already had as half blocks.
+// Too new for most fonts, though kitty, Ghostty, foot and WezTerm draw the
+// legacy computing block themselves.
 static char sextant_glyphs[64][5];
 
 static void build_sextant_glyphs(void) {
@@ -209,35 +211,6 @@ static void build_sextant_glyphs(void) {
     g[3] = (char)(0x80 | (cp & 0x3F));
     g[4] = '\0';
   }
-}
-
-// Shade blocks only survive the trip to the terminal on a UTF-8 locale.
-static int term_supports_blocks(void) {
-  const char *term = getenv("TERM");
-  if (term && strcmp(term, "dumb") == 0)
-    return 0;
-  const char *loc = getenv("LC_ALL");
-  if (!loc || !*loc)
-    loc = getenv("LC_CTYPE");
-  if (!loc || !*loc)
-    loc = getenv("LANG");
-  if (!loc)
-    return 0;
-  for (; *loc; loc++)
-    if (strncasecmp(loc, "utf", 3) == 0)
-      return 1;
-  return 0;
-}
-
-// Sextants are too new for most fonts, but these terminals draw the legacy
-// computing block themselves, so they render whatever the font is missing.
-static int term_draws_sextants(void) {
-  const char *term = getenv("TERM");
-  if (term && (strstr(term, "kitty") || strstr(term, "ghostty") ||
-               strncmp(term, "foot", 4) == 0))
-    return 1;
-  return getenv("KITTY_WINDOW_ID") || getenv("GHOSTTY_RESOURCES_DIR") ||
-         getenv("WEZTERM_EXECUTABLE");
 }
 
 // Parse a UTF-8 string into individual codepoints
@@ -268,21 +241,12 @@ static void parse_shading(const char *str) {
   }
 }
 
-// mode is ascii/blocks/sextants, or NULL to pick the finest one the terminal
-// can render. chars overrides the mode's ramp with a literal one, and on its
-// own implies ascii — a hand-written ramp is not something to slice into
-// sub-cells. Returns 0 on an unknown mode.
+// mode is ascii/blocks/sextants, or NULL for the ascii default. The sub-cell
+// modes are opt-in: ascii is the look, not a fallback. chars overrides the
+// mode's ramp with a literal one. Returns 0 on an unknown mode.
 static int select_shading(const char *mode, const char *chars) {
-  if (!mode) {
-    if (chars)
-      mode = "ascii";
-    else if (term_draws_sextants())
-      mode = "sextants";
-    else if (term_supports_blocks())
-      mode = "blocks";
-    else
-      mode = "ascii";
-  }
+  if (!mode)
+    mode = "ascii";
   if (strcmp(mode, "sextants") == 0) {
     sub_cols = 2;
     sub_rows = 3;
@@ -847,8 +811,8 @@ static void load_default_logo(void) {
   }
 }
 
-// Headroom for the sub-cell modes, which sample a finer grid and so need more
-// points to fill it: sextants at --size 3 land near 150k
+// Headroom for the opt-in sub-cell modes, which sample a finer grid and so
+// need more points to fill it: sextants at --size 3 land near 150k
 #define MAX_POINTS 200000
 static float PX[MAX_POINTS], PY[MAX_POINTS], PZ[MAX_POINTS];
 static float NX[MAX_POINTS], NY[MAX_POINTS], NZ[MAX_POINTS];
@@ -3157,14 +3121,11 @@ int main(int argc, char **argv) {
           "  --frames <n>              Stop after n frames (default 2000)\n"
           "  --infinite                Run forever (keypress or Ctrl-C to "
           "exit)\n"
-          "  --shading-mode <mode>     sextants (2x3 sub-cell blocks), blocks "
-          "(2x2),\n"
-          "                            or ascii (.,-~:;=!*#$@). Default: the "
-          "finest\n"
-          "                            mode the terminal can render\n"
+          "  --shading-mode <mode>     ascii (.,-~:;=!*#$@, the default), or "
+          "opt into\n"
+          "                            sub-cell blocks: sextants (2x3) or "
+          "blocks (2x2)\n"
           "  --shading-chars <str>     Custom shading ramp, supports UTF-8\n"
-          "                            Implies ascii unless --shading-mode is "
-          "set\n"
           "  --box                     Draw a border box around the info block\n"
           "  -V, --version             Show version\n"
           "  -h, --help                Show this help\n\n"
@@ -3183,7 +3144,7 @@ int main(int argc, char **argv) {
           "blue,\n"
           "                             magenta, cyan, white, or ANSI number)\n"
           "    separator=<char>         Title separator character\n"
-          "    shading_mode=<mode>      sextants, blocks or ascii\n"
+          "    shading_mode=<mode>      ascii (default), blocks or sextants\n"
           "    shading=<str>            Shading ramp characters\n"
           "    light=<dir>              Light direction (top-left, top-right, "
           "top,\n"
@@ -3256,7 +3217,7 @@ int main(int argc, char **argv) {
   config_defaults();
   load_config();
 
-  // Shading: CLI flags, then config, then whatever the terminal can render
+  // Shading: CLI flags, then config, then the ascii default
   if (!shading && config_shading[0])
     shading = config_shading;
   if (!shading_mode && config_shading_mode[0])

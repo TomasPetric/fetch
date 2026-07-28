@@ -216,7 +216,7 @@ colors
 # appearance
 # label_color=magenta   (red, green, yellow, blue, magenta, cyan, white)
 # separator=─           (character for the title separator)
-# shading_mode=sextants (sextants, blocks or ascii)
+# shading_mode=ascii    (ascii, or opt into blocks / sextants)
 # shading=.,-~:;=!*#$@  (characters for 3D shading, supports UTF-8)
 # box=0                 (adds a box around the system-data, 0 = off, 1 = on)
 
@@ -249,7 +249,7 @@ colors
 | `--no-color` | Disable coloring |
 | `--frames <n>` | Stop after n frames |
 | `--infinite` | Run forever |
-| `--shading-mode <mode>` | `sextants`, `blocks` or `ascii` (default: best the terminal can render) |
+| `--shading-mode <mode>` | `ascii` (default), or opt into sub-cell blocks with `sextants` (2x3) or `blocks` (2x2) |
 | `--shading-chars <str>` | Custom shading ramp, supports UTF-8 |
 | `-h`, `--help` | Show help |
 | `-V`, `--version` | Show version |
@@ -290,13 +290,12 @@ For a deep dive with visuals and code, see the [full blog post](https://areofyl.
    handle occlusion.
 
 6. **Shading** – Blinn-Phong lighting (diffuse + specular) gives every visible
-   point a brightness. Coverage is sampled finer than the character cell –
-   2×3 for sextants, 2×2 for blocks – and each cell picks whichever glyph
-   carries the right amount of ink: a shade block (`░▒▓█`) where the cell is
-   filled, a partial block where the silhouette cuts through it. So an edge
+   point a brightness, which maps onto the `.,-~:;=!*#$@` ramp, one character
+   per cell. `--shading-mode sextants` or `blocks` instead samples coverage
+   finer than the character cell – 2×3 or 2×2 – and each cell picks whichever
+   glyph carries the right amount of ink: a shade block (`░▒▓█`) where the cell
+   is filled, a partial block where the silhouette cuts through it. So an edge
    lands on a fraction of a cell instead of snapping to the character grid.
-   ASCII mode skips the sub-sampling and maps brightness straight onto
-   `.,-~:;=!*#$@`.
 
    Logos that ship their own colors keep them. The rest are two-toned by
    surface: front and back faces in `logo_inner`, extruded sides in
