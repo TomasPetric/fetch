@@ -72,7 +72,9 @@ static int layout_stacked = 0;      // info below the logo instead of beside it
 static int info_clip_cols = -1;     // clip info lines to this many visible columns
 static int stacked_info_rows = 0;   // info lines shown in stacked layout
 #define PI 3.14159265f
-#define FETCH_VERSION "2.2.1"
+#ifndef FETCH_VERSION
+#define FETCH_VERSION "dev"
+#endif
 
 // --- UTF-8 helpers ---
 
