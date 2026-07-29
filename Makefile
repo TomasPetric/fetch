@@ -4,7 +4,6 @@ PREFIX ?= /usr/local
 LDFLAGS ?=
 LDLIBS = -lm
 VERSION := $(shell cat VERSION)
-CPPFLAGS += -DFETCH_VERSION=\"$(VERSION)\"
 CODENAME ?= Overclocked ASCII
 
 UNAME_S := $(shell uname -s)
