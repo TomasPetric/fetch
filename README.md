@@ -134,6 +134,8 @@ As for all GURU packages, you will have to add the package in your `package.acce
 
 ## Logos
 
+Custom logos: [docs/custom-logos.md](docs/custom-logos.md)
+
 By default it auto-detects your distro and grabs the logo from fastfetch
 (if installed) with its original per-character colors preserved. Works with
 any of fastfetch's 500+ distro logos!
@@ -181,6 +183,8 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 Stats like memory, battery, and uptime update in real-time while the logo spins.
 
 ## Config
+
+Full reference: [docs/configuration.md](docs/configuration.md)
 
 Create `~/.config/fetch/config` to customize:
 
@@ -257,6 +261,8 @@ colors
 CLI flags override config file settings.
 
 ## Shading modes
+
+Full reference: [docs/shading-modes.md](docs/shading-modes.md)
 
 ASCII is the default. The sub-cell modes are opt-in, and trade the donut.c look
 for a silhouette that lands on a fraction of a cell instead of snapping to the
