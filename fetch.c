@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <limits.h>
+#include <ctype.h>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -1966,13 +1967,33 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
     char *rev = strstr(line, " (rev ");
     if (rev)
       *rev = '\0';
+
     char *lb = strrchr(line, '[');
     char *rb = strrchr(line, ']');
     const char *name = NULL;
-    if (lb && rb && rb > lb) {
+
+    // AMD's lspci strings always wrap the vendor tag in brackets
+    // (e.g. "[AMD/ATI]"); discrete cards additionally wrap the product
+    // name in a second pair ("[Radeon RX 9070 XT]"), but some iGPUs only
+    // have the single vendor bracket. Blindly taking the last bracket
+    // pair picks up "AMD/ATI" in that case, so count brackets first.
+    int bracket_count = 0;
+    for (char *pp = line; *pp; pp++)
+      if (*pp == '[')
+        bracket_count++;
+
+    if (bracket_count >= 2 && lb && rb && rb > lb) {
       *rb = '\0';
       name = lb + 1;
-    } else {
+    } else if (lb && rb && rb > lb) {
+      char *after = rb + 1;
+      while (*after == ' ')
+        after++;
+      if (*after)
+        name = after;
+    }
+
+    if (!name) {
       char *corp = strstr(line, " Corporation ");
       int skip = corp ? 13 : 0;
       if (!corp) {
@@ -1995,6 +2016,7 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
       while (*name == ' ')
         name++;
     }
+
     if (name && *name) {
       strncpy(out, name, outlen - 1);
       out[outlen - 1] = '\0';
@@ -2003,6 +2025,35 @@ static int gpu_lookup_lspci(const char *pci_id, char *out, int outlen) {
   }
   pclose(fp);
   return ok;
+}
+
+static int str_ci_contains(const char *haystack, const char *needle) {
+  size_t hlen = strlen(haystack), nlen = strlen(needle);
+  if (nlen == 0 || nlen > hlen)
+    return 0;
+  for (size_t i = 0; i + nlen <= hlen; i++) {
+    size_t j = 0;
+    while (j < nlen &&
+           tolower((unsigned char)haystack[i + j]) ==
+               tolower((unsigned char)needle[j]))
+      j++;
+    if (j == nlen)
+      return 1;
+  }
+  return 0;
+}
+
+static int amd_name_is_igpu(const char *name) {
+  static const char *codenames[] = {
+      "Raphael",     "Phoenix",     "Phoenix2",  "Hawk Point",
+      "Renoir",      "Cezanne",     "Rembrandt", "Picasso",
+      "Raven",       "Raven2",      "Van Gogh",  "Mendocino",
+      "Barcelo",     "Strix Point", "Strix Halo", "Krackan Point",
+      NULL};
+  for (int i = 0; codenames[i]; i++)
+    if (str_ci_contains(name, codenames[i]))
+      return 1;
+  return 0;
 }
 #endif
 
@@ -2126,6 +2177,8 @@ static void gather_gpu(void) {
         type = "Integrated";
       else if (!strcmp(driver, "nvidia") || !strcmp(driver, "nouveau"))
         type = "Discrete";
+      else if (!strcmp(driver, "amdgpu"))
+        type = amd_name_is_igpu(name) ? "Integrated" : "Discrete";
     }
 
     if (!name[0])
