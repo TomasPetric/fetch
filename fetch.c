@@ -2183,13 +2183,10 @@ static void gather_gpu(void) {
 
     if (!name[0])
       continue;
-    if (type[0]) {
-      char label[32];
-      snprintf(label, sizeof(label), "GPU [%s]", type);
-      add_info(label, "%s", name);
-    } else {
+    if (type[0])
+      add_info("GPU", "%s [%s]", name, type);
+    else
       add_info("GPU", "%s", name);
-    }
   }
   closedir(d);
 #endif
