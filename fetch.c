@@ -141,7 +141,21 @@ static int visible_width(const char *s) {
 // Copy s into p clipped to max_cols visible columns (ANSI passes through,
 // max_cols < 0 = no limit). Appends a reset if the clip cut a color short.
 static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
-  int w = 0, had_ansi = 0, cut = 0;
+  // first pass: measure visible width to know if we need to clip
+  int total_w = 0;
+  const char *t = s;
+  while (*t) {
+    int a = skip_ansi(t);
+    if (a) { t += a; continue; }
+    t += utf8_char_len((unsigned char)*t);
+    total_w++;
+  }
+  int need_clip = (max_cols >= 0 && total_w > max_cols);
+  int limit = max_cols;
+  if (need_clip && max_cols >= 6)
+    limit = max_cols - 3; // leave room for "..."
+
+  int w = 0, had_ansi = 0;
   while (*s && p + 8 < end) {
     int a = skip_ansi(s);
     if (a) {
@@ -153,10 +167,8 @@ static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
       had_ansi = 1;
       continue;
     }
-    if (max_cols >= 0 && w >= max_cols) {
-      cut = 1;
+    if (limit >= 0 && w >= limit)
       break;
-    }
     int len = utf8_char_len((unsigned char)*s);
     int actual = 0;
     while (actual < len && s[actual])
@@ -166,7 +178,11 @@ static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
     s += actual;
     w++;
   }
-  if (had_ansi && cut && p + 4 < end) {
+  if (need_clip && max_cols >= 6 && p + 3 < end) {
+    memcpy(p, "...", 3);
+    p += 3;
+  }
+  if (had_ansi && need_clip && p + 4 < end) {
     memcpy(p, "\033[0m", 4);
     p += 4;
   }
