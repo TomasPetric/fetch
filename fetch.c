@@ -142,7 +142,21 @@ static int visible_width(const char *s) {
 // Copy s into p clipped to max_cols visible columns (ANSI passes through,
 // max_cols < 0 = no limit). Appends a reset if the clip cut a color short.
 static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
-  int w = 0, had_ansi = 0, cut = 0;
+  // first pass: measure visible width to know if we need to clip
+  int total_w = 0;
+  const char *t = s;
+  while (*t) {
+    int a = skip_ansi(t);
+    if (a) { t += a; continue; }
+    t += utf8_char_len((unsigned char)*t);
+    total_w++;
+  }
+  int need_clip = (max_cols >= 0 && total_w > max_cols);
+  int limit = max_cols;
+  if (need_clip && max_cols >= 6)
+    limit = max_cols - 3; // leave room for "..."
+
+  int w = 0, had_ansi = 0;
   while (*s && p + 8 < end) {
     int a = skip_ansi(s);
     if (a) {
@@ -154,10 +168,8 @@ static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
       had_ansi = 1;
       continue;
     }
-    if (max_cols >= 0 && w >= max_cols) {
-      cut = 1;
+    if (limit >= 0 && w >= limit)
       break;
-    }
     int len = utf8_char_len((unsigned char)*s);
     int actual = 0;
     while (actual < len && s[actual])
@@ -167,7 +179,11 @@ static char *emit_clipped(char *p, char *end, const char *s, int max_cols) {
     s += actual;
     w++;
   }
-  if (had_ansi && cut && p + 4 < end) {
+  if (need_clip && max_cols >= 6 && p + 3 < end) {
+    memcpy(p, "...", 3);
+    p += 3;
+  }
+  if (had_ansi && need_clip && p + 4 < end) {
     memcpy(p, "\033[0m", 4);
     p += 4;
   }
@@ -1468,7 +1484,7 @@ static void gather_packages(void) {
     if (n > 0)
       snprintf(val, sizeof(val), "%d (dpkg)", n);
   }
-  // rpm/dnf (Fedora, RHEL, openSUSE, etc.)
+  // rpm (Fedora, RHEL, openSUSE, etc.)
   if (!val[0]) {
     FILE *fp = popen("rpm -qa 2>/dev/null", "r");
     if (fp) {
@@ -1478,7 +1494,7 @@ static void gather_packages(void) {
         n++;
       pclose(fp);
       if (n > 0)
-        snprintf(val, sizeof(val), "%d (dnf)", n);
+        snprintf(val, sizeof(val), "%d (rpm)", n);
     }
   }
   // xbps (Void)
@@ -3343,8 +3359,11 @@ int main(int argc, char **argv) {
       printf("fetch %s \"%s\" (%s, %s)\n", FETCH_VERSION, FETCH_CODENAME,
              FETCH_ARCH, FETCH_OS);
       return 0;
-    } else if ((strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) &&
-               i + 1 < argc) {
+    } else if (strcmp(argv[i], "--logo") == 0 || strcmp(argv[i], "-l") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       logo_name = argv[++i];
     } else if (strcmp(argv[i], "--rotate-x") == 0) {
       rotate_x = 1;
@@ -3352,33 +3371,59 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[i], "--rotate-y") == 0) {
       rotate_x = 0;
       rotate_y = 1;
-    } else if ((strcmp(argv[i], "--speed") == 0 ||
-                strcmp(argv[i], "-s") == 0) &&
-               i + 1 < argc) {
+    } else if (strcmp(argv[i], "--speed") == 0 || strcmp(argv[i], "-s") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       speed = atof(argv[++i]);
     } else if (strcmp(argv[i], "--no-info") == 0) {
       show_info = 0;
     } else if (strcmp(argv[i], "--no-color") == 0) {
       use_color = 0;
-    } else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--frames") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       max_frames = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--infinite") == 0) {
       max_frames = 0;
-    } else if (strcmp(argv[i], "--shading-chars") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--shading-chars") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       shading = argv[++i];
-    } else if (strcmp(argv[i], "--shading-mode") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--shading-mode") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       shading_mode = argv[++i];
-    } else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--height") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       config_height = atoi(argv[++i]);
       if (config_height > MAX_HEIGHT)
         config_height = MAX_HEIGHT;
-    } else if (strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--size") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       size_scale = atof(argv[++i]);
       if (size_scale < 0.5f)
         size_scale = 0.5f;
       if (size_scale > 5.0f)
         size_scale = 5.0f;
-    } else if (strcmp(argv[i], "--depth") == 0 && i + 1 < argc) {
+    } else if (strcmp(argv[i], "--depth") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "fetch: option '%s' requires an argument\n", argv[i]);
+        return 1;
+      }
       config_depth = atof(argv[++i]);
       if (config_depth < 0.1f)
         config_depth = 0.1f;
