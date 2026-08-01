@@ -16,6 +16,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <time.h>
+#include <limits.h>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -2548,24 +2549,136 @@ static void gather_terminal(void) {
     add_info("Terminal", "%s", term);
 }
 
+#ifndef __APPLE__
+static int iface_is_wireless(const char *name) {
+  char path[128];
+  snprintf(path, sizeof(path), "/sys/class/net/%s/wireless", name);
+  DIR *d = opendir(path);
+  if (d) {
+    closedir(d);
+    return 1;
+  }
+  return 0;
+}
+#endif
+
+// Best-effort human label for an interface. Falls back to the raw name
+// wrapped in "Local IP (...)" for anything unrecognized.
+static void iface_label(const char *name, int is_default, char *out, int outlen) {
+  const char *kind = NULL;
+
+  if (strncmp(name, "tailscale", 9) == 0)
+    kind = "Tailscale";
+  else if (strncmp(name, "zt", 2) == 0)
+    kind = "ZeroTier";
+  else if (strncmp(name, "wg", 2) == 0)
+    kind = "WireGuard";
+  else if (strncmp(name, "ppp", 3) == 0)
+    kind = "PPP";
+  else if (strncmp(name, "docker", 6) == 0 || strncmp(name, "br-", 3) == 0 ||
+           strncmp(name, "veth", 4) == 0 || strncmp(name, "virbr", 5) == 0)
+    kind = "Virtual";
+  else if (strncmp(name, "utun", 4) == 0 || strncmp(name, "tun", 3) == 0 ||
+           strncmp(name, "tap", 3) == 0)
+    kind = "VPN";
+#ifdef __APPLE__
+  else if (strncmp(name, "en", 2) == 0)
+    kind = is_default ? "Wi-Fi/Ethernet" : NULL;
+#else
+  else if (iface_is_wireless(name))
+    kind = "Wi-Fi";
+  else if (strncmp(name, "eth", 3) == 0 || strncmp(name, "en", 2) == 0)
+    kind = "Ethernet";
+#endif
+
+  if (kind)
+    snprintf(out, outlen, "%s (%s)", kind, name);
+  else
+    snprintf(out, outlen, "Local IP (%s)", name);
+}
+
+static int get_default_route_iface(char *out, int outlen) {
+#ifdef __APPLE__
+  FILE *fp = popen("route -n get default 2>/dev/null", "r");
+  if (!fp)
+    return 0;
+  char buf[256];
+  int found = 0;
+  while (fgets(buf, sizeof(buf), fp)) {
+    char *p = strstr(buf, "interface:");
+    if (p) {
+      p += 10;
+      while (*p == ' ')
+        p++;
+      int len = strlen(p);
+      while (len > 0 && (p[len - 1] == '\n' || p[len - 1] == '\r' || p[len - 1] == ' '))
+        p[--len] = '\0';
+      if (len > 0 && len < outlen) {
+        memcpy(out, p, len + 1);
+        found = 1;
+      }
+      break;
+    }
+  }
+  pclose(fp);
+  return found;
+#else
+  FILE *fp = fopen("/proc/net/route", "r");
+  if (!fp)
+    return 0;
+  char line[256];
+  int found = 0;
+  unsigned long best_metric = ULONG_MAX;
+  if (!fgets(line, sizeof(line), fp)) { // skip header
+    fclose(fp);
+    return 0;
+  }
+  while (fgets(line, sizeof(line), fp)) {
+    char iface[64];
+    unsigned long dest, metric;
+    if (sscanf(line, "%63s %lx %*x %*x %*d %*d %lu", iface, &dest, &metric) == 3) {
+      if (dest == 0 && metric < best_metric) {
+        best_metric = metric;
+        strncpy(out, iface, outlen - 1);
+        out[outlen - 1] = '\0';
+        found = 1;
+      }
+    }
+  }
+  fclose(fp);
+  return found;
+#endif
+}
+
 static void gather_ip(void) {
+  char default_iface[64] = "";
+  get_default_route_iface(default_iface, sizeof(default_iface));
+
   struct ifaddrs *ifa_list, *ifa;
   if (getifaddrs(&ifa_list) != 0)
     return;
-  for (ifa = ifa_list; ifa; ifa = ifa->ifa_next) {
+
+  struct {
+    char name[64];
+    char addr[80];
+    int is_default;
+  } entries[16];
+  int n = 0;
+
+  for (ifa = ifa_list; ifa && n < 16; ifa = ifa->ifa_next) {
     if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET)
       continue;
-    // Skip loopback
 #ifdef __APPLE__
     if (strcmp(ifa->ifa_name, "lo0") == 0)
 #else
     if (strcmp(ifa->ifa_name, "lo") == 0)
 #endif
       continue;
+
     struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
     char addr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &sa->sin_addr, addr, sizeof(addr));
-    // Get prefix length from netmask
+
     struct sockaddr_in *mask = (struct sockaddr_in *)ifa->ifa_netmask;
     unsigned int bits = 0;
     if (mask) {
@@ -2575,18 +2688,27 @@ static void gather_ip(void) {
         m <<= 1;
       }
     }
-    char lbl[64];
-    snprintf(lbl, sizeof(lbl), "Local IP (%s)", ifa->ifa_name);
-    if (bits > 0) {
-      char full[80];
-      snprintf(full, sizeof(full), "%s/%u", addr, bits);
-      add_info(lbl, "%s", full);
-    } else {
-      add_info(lbl, "%s", addr);
-    }
-    break; // first non-loopback interface
+
+    strncpy(entries[n].name, ifa->ifa_name, sizeof(entries[n].name) - 1);
+    entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+    if (bits > 0)
+      snprintf(entries[n].addr, sizeof(entries[n].addr), "%s/%u", addr, bits);
+    else
+      snprintf(entries[n].addr, sizeof(entries[n].addr), "%s", addr);
+    entries[n].is_default = default_iface[0] && strcmp(ifa->ifa_name, default_iface) == 0;
+    n++;
   }
   freeifaddrs(ifa_list);
+
+  for (int pass = 1; pass >= 0; pass--) {
+    for (int i = 0; i < n; i++) {
+      if (entries[i].is_default != pass)
+        continue;
+      char lbl[64];
+      iface_label(entries[i].name, entries[i].is_default, lbl, sizeof(lbl));
+      add_info(lbl, "%s", entries[i].addr);
+    }
+  }
 }
 
 static void gather_locale(void) {
