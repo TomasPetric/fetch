@@ -1512,6 +1512,69 @@ static void gather_packages(void) {
     if (n > 0)
       snprintf(val, sizeof(val), "%d (apk)", n);
   }
+  // Nix (NixOS, or Nix package manager on other distros)
+  {
+    const struct { const char *path; const char *label; } nix_profiles[] = {
+        {"/run/current-system/sw", "system"},
+        {"/nix/var/nix/profiles/default", "default"},
+        {NULL, NULL},
+    };
+    char home_profile[256] = "";
+    const char *home = getenv("HOME");
+    if (home) {
+      snprintf(home_profile, sizeof(home_profile), "%s/.nix-profile", home);
+    }
+
+    char nix_val[128] = "";
+    for (int i = 0; nix_profiles[i].path; i++) {
+      char cmd[300];
+      snprintf(cmd, sizeof(cmd), "nix-store -qR %s 2>/dev/null | wc -l",
+               nix_profiles[i].path);
+      FILE *fp = popen(cmd, "r");
+      if (!fp)
+        continue;
+      int count = 0;
+      if (fscanf(fp, "%d", &count) != 1)
+        count = 0;
+      pclose(fp);
+      if (count > 0) {
+        char part[48];
+        snprintf(part, sizeof(part), "%d (%s)", count, nix_profiles[i].label);
+        if (nix_val[0])
+          snprintf(nix_val + strlen(nix_val), sizeof(nix_val) - strlen(nix_val),
+                   ", %s", part);
+        else
+          snprintf(nix_val, sizeof(nix_val), "%s", part);
+      }
+    }
+    if (home_profile[0]) {
+      char cmd[300];
+      snprintf(cmd, sizeof(cmd), "nix-store -qR %s 2>/dev/null | wc -l",
+               home_profile);
+      FILE *fp = popen(cmd, "r");
+      if (fp) {
+        int count = 0;
+        if (fscanf(fp, "%d", &count) != 1)
+          count = 0;
+        pclose(fp);
+        if (count > 0) {
+          char part[48];
+          snprintf(part, sizeof(part), "%d (user)", count);
+          if (nix_val[0])
+            snprintf(nix_val + strlen(nix_val), sizeof(nix_val) - strlen(nix_val),
+                     ", %s", part);
+          else
+            snprintf(nix_val, sizeof(nix_val), "%s", part);
+        }
+      }
+    }
+    if (nix_val[0]) {
+      if (val[0])
+        snprintf(val + strlen(val), sizeof(val) - strlen(val), ", %s", nix_val);
+      else
+        snprintf(val, sizeof(val), "%s", nix_val);
+    }
+  }
 #endif
 
   n = 0;
