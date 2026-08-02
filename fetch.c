@@ -1512,62 +1512,98 @@ static void gather_packages(void) {
     if (n > 0)
       snprintf(val, sizeof(val), "%d (apk)", n);
   }
-  // Nix (NixOS, or Nix package manager on other distros)
+  // Nix (NixOS, or Nix package manager on other distros).
+  // Uses direct references (one entry per package a profile links
+  // together), not full closure, closure size massively overcounts
+  // since it includes every transitive shared library.
+  //
+  // Home-manager profiles have an extra layer of indirection:
+  // /etc/profiles/per-user/$USER resolves to a "user-environment"
+  // derivation that itself only references a single "home-manager-path"
+  // derivation, which is the actual buildEnv joining all your packages.
+  // So the user-profile count needs one extra reference-resolution hop
+  // that the system profile doesn't.
   {
-    const struct { const char *path; const char *label; } nix_profiles[] = {
-        {"/run/current-system/sw", "system"},
-        {"/nix/var/nix/profiles/default", "default"},
-        {NULL, NULL},
-    };
-    char home_profile[256] = "";
-    const char *home = getenv("HOME");
-    if (home) {
-      snprintf(home_profile, sizeof(home_profile), "%s/.nix-profile", home);
+    char cmd[400], buf[256];
+    FILE *fp;
+
+    int nix_system = 0;
+    fp = popen("nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l", "r");
+    if (fp) {
+      if (fscanf(fp, "%d", &nix_system) != 1)
+        nix_system = 0;
+      pclose(fp);
     }
 
-    char nix_val[128] = "";
-    for (int i = 0; nix_profiles[i].path; i++) {
-      char cmd[300];
-      snprintf(cmd, sizeof(cmd), "nix-store -qR %s 2>/dev/null | wc -l",
-               nix_profiles[i].path);
-      FILE *fp = popen(cmd, "r");
-      if (!fp)
-        continue;
-      int count = 0;
-      if (fscanf(fp, "%d", &count) != 1)
-        count = 0;
-      pclose(fp);
-      if (count > 0) {
-        char part[48];
-        snprintf(part, sizeof(part), "%d (%s)", count, nix_profiles[i].label);
-        if (nix_val[0])
-          snprintf(nix_val + strlen(nix_val), sizeof(nix_val) - strlen(nix_val),
-                   ", %s", part);
-        else
-          snprintf(nix_val, sizeof(nix_val), "%s", part);
-      }
-    }
-    if (home_profile[0]) {
-      char cmd[300];
-      snprintf(cmd, sizeof(cmd), "nix-store -qR %s 2>/dev/null | wc -l",
-               home_profile);
-      FILE *fp = popen(cmd, "r");
+    int nix_user = 0;
+    const char *home = getenv("HOME");
+    if (home) {
+      const char *base = strrchr(home, '/');
+      base = base ? base + 1 : home;
+
+      char resolved[512] = "";
+      snprintf(cmd, sizeof(cmd),
+               "readlink -f /etc/profiles/per-user/%s 2>/dev/null", base);
+      fp = popen(cmd, "r");
       if (fp) {
-        int count = 0;
-        if (fscanf(fp, "%d", &count) != 1)
-          count = 0;
+        if (fgets(buf, sizeof(buf), fp)) {
+          int len = strlen(buf);
+          while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+            buf[--len] = '\0';
+          strncpy(resolved, buf, sizeof(resolved) - 1);
+        }
         pclose(fp);
-        if (count > 0) {
-          char part[48];
-          snprintf(part, sizeof(part), "%d (user)", count);
-          if (nix_val[0])
-            snprintf(nix_val + strlen(nix_val), sizeof(nix_val) - strlen(nix_val),
-                     ", %s", part);
-          else
-            snprintf(nix_val, sizeof(nix_val), "%s", part);
+      }
+
+      if (resolved[0]) {
+        // First hop: user-environment -> home-manager-path
+        char hop1[512] = "";
+        snprintf(cmd, sizeof(cmd),
+                 "nix-store -q --references %s 2>/dev/null", resolved);
+        fp = popen(cmd, "r");
+        if (fp) {
+          if (fgets(buf, sizeof(buf), fp)) {
+            int len = strlen(buf);
+            while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+              buf[--len] = '\0';
+            strncpy(hop1, buf, sizeof(hop1) - 1);
+          }
+          pclose(fp);
+        }
+
+        if (hop1[0]) {
+          // Second hop: home-manager-path -> actual package references
+          snprintf(cmd, sizeof(cmd),
+                   "nix-store -q --references %s 2>/dev/null | wc -l", hop1);
+          fp = popen(cmd, "r");
+          if (fp) {
+            if (fscanf(fp, "%d", &nix_user) != 1)
+              nix_user = 0;
+            pclose(fp);
+          }
+        } else {
+          // No extra indirection (plain nix-env style profile) — count
+          // references directly on the resolved path.
+          snprintf(cmd, sizeof(cmd),
+                   "nix-store -q --references %s 2>/dev/null | wc -l", resolved);
+          fp = popen(cmd, "r");
+          if (fp) {
+            if (fscanf(fp, "%d", &nix_user) != 1)
+              nix_user = 0;
+            pclose(fp);
+          }
         }
       }
     }
+
+    char nix_val[64] = "";
+    if (nix_system > 0 && nix_user > 0)
+      snprintf(nix_val, sizeof(nix_val), "%d (system), %d (user)", nix_system, nix_user);
+    else if (nix_system > 0)
+      snprintf(nix_val, sizeof(nix_val), "%d (system)", nix_system);
+    else if (nix_user > 0)
+      snprintf(nix_val, sizeof(nix_val), "%d (user)", nix_user);
+
     if (nix_val[0]) {
       if (val[0])
         snprintf(val + strlen(val), sizeof(val) - strlen(val), ", %s", nix_val);
