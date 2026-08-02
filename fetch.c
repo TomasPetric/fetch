@@ -1599,20 +1599,12 @@ static void gather_shell(void) {
   if (fp) {
     char buf[256];
     if (fgets(buf, sizeof(buf), fp)) {
-      // Extract version number from first line
-      // e.g. "zsh 5.9.0.3-test (aarch64...)" or "bash 5.2.26(1)-release"
-      // Find the version part after the shell name
-      char *ver = strstr(buf, name);
-      if (ver) {
-        ver += strlen(name);
-        while (*ver == ' ')
-          ver++;
-      } else {
-        // Try to find first digit
-        ver = buf;
-        while (*ver && !(*ver >= '0' && *ver <= '9'))
-          ver++;
-      }
+      // Find the first digit, more reliable than searching past the
+      // shell name, since some shells put a comma right after the name
+      // (e.g. fish: "fish, version 4.8.1", bash: "GNU bash, version 5.2.26...")
+      char *ver = buf;
+      while (*ver && !(*ver >= '0' && *ver <= '9'))
+        ver++;
       if (*ver) {
         int len = 0;
         while (ver[len] && ver[len] != ' ' && ver[len] != '(' &&
