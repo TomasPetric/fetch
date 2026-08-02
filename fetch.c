@@ -1523,7 +1523,7 @@ static void gather_packages(void) {
   // derivation, which is the actual buildEnv joining all your packages.
   // So the user-profile count needs one extra reference-resolution hop
   // that the system profile doesn't.
-  {
+  if (!val[0]) {
     char cmd[400], buf[256];
     FILE *fp;
 
@@ -1556,7 +1556,6 @@ static void gather_packages(void) {
       }
 
       if (resolved[0]) {
-        // First hop: user-environment -> home-manager-path
         char hop1[512] = "";
         snprintf(cmd, sizeof(cmd),
                  "nix-store -q --references %s 2>/dev/null", resolved);
@@ -1572,7 +1571,6 @@ static void gather_packages(void) {
         }
 
         if (hop1[0]) {
-          // Second hop: home-manager-path -> actual package references
           snprintf(cmd, sizeof(cmd),
                    "nix-store -q --references %s 2>/dev/null | wc -l", hop1);
           fp = popen(cmd, "r");
@@ -1582,8 +1580,6 @@ static void gather_packages(void) {
             pclose(fp);
           }
         } else {
-          // No extra indirection (plain nix-env style profile) — count
-          // references directly on the resolved path.
           snprintf(cmd, sizeof(cmd),
                    "nix-store -q --references %s 2>/dev/null | wc -l", resolved);
           fp = popen(cmd, "r");
@@ -1596,20 +1592,12 @@ static void gather_packages(void) {
       }
     }
 
-    char nix_val[64] = "";
     if (nix_system > 0 && nix_user > 0)
-      snprintf(nix_val, sizeof(nix_val), "%d (system), %d (user)", nix_system, nix_user);
+      snprintf(val, sizeof(val), "%d (system), %d (user)", nix_system, nix_user);
     else if (nix_system > 0)
-      snprintf(nix_val, sizeof(nix_val), "%d (system)", nix_system);
+      snprintf(val, sizeof(val), "%d (system)", nix_system);
     else if (nix_user > 0)
-      snprintf(nix_val, sizeof(nix_val), "%d (user)", nix_user);
-
-    if (nix_val[0]) {
-      if (val[0])
-        snprintf(val + strlen(val), sizeof(val) - strlen(val), ", %s", nix_val);
-      else
-        snprintf(val, sizeof(val), "%s", nix_val);
-    }
+      snprintf(val, sizeof(val), "%d (user)", nix_user);
   }
 #endif
 
