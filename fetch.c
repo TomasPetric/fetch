@@ -1524,72 +1524,40 @@ static void gather_packages(void) {
   // So the user-profile count needs one extra reference-resolution hop
   // that the system profile doesn't.
   if (!val[0]) {
-    char cmd[400], buf[256];
-    FILE *fp;
-
-    int nix_system = 0;
-    fp = popen("nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l", "r");
-    if (fp) {
-      if (fscanf(fp, "%d", &nix_system) != 1)
-        nix_system = 0;
-      pclose(fp);
+    const char *home = getenv("HOME");
+    char base[128] = "";
+    if (home) {
+      const char *b = strrchr(home, '/');
+      b = b ? b + 1 : home;
+      strncpy(base, b, sizeof(base) - 1);
     }
 
-    int nix_user = 0;
-    const char *home = getenv("HOME");
-    if (home) {
-      const char *base = strrchr(home, '/');
-      base = base ? base + 1 : home;
+    char cmd[600];
+    snprintf(cmd, sizeof(cmd),
+      "sh -c '"
+      "sys=$(nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l); "
+      "resolved=$(readlink -f /etc/profiles/per-user/%s 2>/dev/null); "
+      "if [ -n \"$resolved\" ]; then "
+      "  hop1=$(nix-store -q --references \"$resolved\" 2>/dev/null); "
+      "  if [ -n \"$hop1\" ]; then "
+      "    usr=$(nix-store -q --references \"$hop1\" 2>/dev/null | wc -l); "
+      "  else "
+      "    usr=$(nix-store -q --references \"$resolved\" 2>/dev/null | wc -l); "
+      "  fi; "
+      "else "
+      "  usr=0; "
+      "fi; "
+      "echo \"$sys $usr\"'",
+      base);
 
-      char resolved[512] = "";
-      snprintf(cmd, sizeof(cmd),
-               "readlink -f /etc/profiles/per-user/%s 2>/dev/null", base);
-      fp = popen(cmd, "r");
-      if (fp) {
-        if (fgets(buf, sizeof(buf), fp)) {
-          int len = strlen(buf);
-          while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
-            buf[--len] = '\0';
-          strncpy(resolved, buf, sizeof(resolved) - 1);
-        }
-        pclose(fp);
+    int nix_system = 0, nix_user = 0;
+    FILE *fp = popen(cmd, "r");
+    if (fp) {
+      if (fscanf(fp, "%d %d", &nix_system, &nix_user) != 2) {
+        nix_system = 0;
+        nix_user = 0;
       }
-
-      if (resolved[0]) {
-        char hop1[512] = "";
-        snprintf(cmd, sizeof(cmd),
-                 "nix-store -q --references %s 2>/dev/null", resolved);
-        fp = popen(cmd, "r");
-        if (fp) {
-          if (fgets(buf, sizeof(buf), fp)) {
-            int len = strlen(buf);
-            while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
-              buf[--len] = '\0';
-            strncpy(hop1, buf, sizeof(hop1) - 1);
-          }
-          pclose(fp);
-        }
-
-        if (hop1[0]) {
-          snprintf(cmd, sizeof(cmd),
-                   "nix-store -q --references %s 2>/dev/null | wc -l", hop1);
-          fp = popen(cmd, "r");
-          if (fp) {
-            if (fscanf(fp, "%d", &nix_user) != 1)
-              nix_user = 0;
-            pclose(fp);
-          }
-        } else {
-          snprintf(cmd, sizeof(cmd),
-                   "nix-store -q --references %s 2>/dev/null | wc -l", resolved);
-          fp = popen(cmd, "r");
-          if (fp) {
-            if (fscanf(fp, "%d", &nix_user) != 1)
-              nix_user = 0;
-            pclose(fp);
-          }
-        }
-      }
+      pclose(fp);
     }
 
     if (nix_system > 0 && nix_user > 0)
