@@ -1515,18 +1515,10 @@ static void gather_packages(void) {
     if (n > 0)
       snprintf(val, sizeof(val), "%d (apk)", n);
   }
+#endif
+  
   // Nix (NixOS, or Nix package manager on other distros).
-  // Uses direct references (one entry per package a profile links
-  // together), not full closure, closure size massively overcounts
-  // since it includes every transitive shared library.
-  //
-  // Home-manager profiles have an extra layer of indirection:
-  // /etc/profiles/per-user/$USER resolves to a "user-environment"
-  // derivation that itself only references a single "home-manager-path"
-  // derivation, which is the actual buildEnv joining all your packages.
-  // So the user-profile count needs one extra reference-resolution hop
-  // that the system profile doesn't.
-  if (!val[0]) {
+  {
     const char *home = getenv("HOME");
     char base[128] = "";
     if (home) {
@@ -1535,23 +1527,43 @@ static void gather_packages(void) {
       strncpy(base, b, sizeof(base) - 1);
     }
 
-    char cmd[600];
-    snprintf(cmd, sizeof(cmd),
-      "sh -c '"
-      "sys=$(nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l); "
-      "resolved=$(readlink -f /etc/profiles/per-user/%s 2>/dev/null); "
-      "if [ -n \"$resolved\" ]; then "
-      "  hop1=$(nix-store -q --references \"$resolved\" 2>/dev/null); "
-      "  if [ -n \"$hop1\" ]; then "
-      "    usr=$(nix-store -q --references \"$hop1\" 2>/dev/null | wc -l); "
-      "  else "
-      "    usr=$(nix-store -q --references \"$resolved\" 2>/dev/null | wc -l); "
-      "  fi; "
-      "else "
-      "  usr=0; "
-      "fi; "
-      "echo \"$sys $usr\"'",
-      base);
+    // Only allow a username charset before it's interpolated
+    // into a shell command, reject anything else rather than trying to
+    // escape it.
+    int base_valid = base[0] != '\0';
+    for (int i = 0; base_valid && base[i]; i++) {
+      char c = base[i];
+      if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'))
+        base_valid = 0;
+    }
+    if (!base_valid)
+      base[0] = '\0';
+
+    char cmd[700];
+    if (base[0]) {
+      snprintf(cmd, sizeof(cmd),
+        "sh -c '"
+        "sys=$(nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l); "
+        "resolved=$(readlink -f /etc/profiles/per-user/%s 2>/dev/null); "
+        "if [ -n \"$resolved\" ]; then "
+        "  hop1=$(nix-store -q --references \"$resolved\" 2>/dev/null); "
+        "  if [ -n \"$hop1\" ]; then "
+        "    usr=$(nix-store -q --references \"$hop1\" 2>/dev/null | wc -l); "
+        "  else "
+        "    usr=$(nix-store -q --references \"$resolved\" 2>/dev/null | wc -l); "
+        "  fi; "
+        "else "
+        "  usr=0; "
+        "fi; "
+        "echo \"$sys $usr\"'",
+        base);
+    } else {
+      snprintf(cmd, sizeof(cmd),
+        "sh -c '"
+        "sys=$(nix-store -q --references /run/current-system/sw 2>/dev/null | wc -l); "
+        "echo \"$sys 0\"'");
+    }
 
     int nix_system = 0, nix_user = 0;
     FILE *fp = popen(cmd, "r");
@@ -1563,14 +1575,21 @@ static void gather_packages(void) {
       pclose(fp);
     }
 
+    char nix_val[64] = "";
     if (nix_system > 0 && nix_user > 0)
-      snprintf(val, sizeof(val), "%d (system), %d (user)", nix_system, nix_user);
+      snprintf(nix_val, sizeof(nix_val), "%d (system), %d (user)", nix_system, nix_user);
     else if (nix_system > 0)
-      snprintf(val, sizeof(val), "%d (system)", nix_system);
+      snprintf(nix_val, sizeof(nix_val), "%d (system)", nix_system);
     else if (nix_user > 0)
-      snprintf(val, sizeof(val), "%d (user)", nix_user);
+      snprintf(nix_val, sizeof(nix_val), "%d (user)", nix_user);
+
+    if (nix_val[0]) {
+      if (val[0])
+        snprintf(val + strlen(val), sizeof(val) - strlen(val), ", %s", nix_val);
+      else
+        snprintf(val, sizeof(val), "%s", nix_val);
+    }
   }
-#endif
 
   n = 0;
   FILE *flatpak_fp = popen("flatpak list --columns=ref 2>/dev/null", "r");
