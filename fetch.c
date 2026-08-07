@@ -1255,6 +1255,34 @@ static void box_wrap_lines(void) {
       field_line[i] += 1;
 }
 
+// Runs `<bin> --version` and extracts the first version-looking token
+// (starting at the first digit). Same extraction strategy as gather_shell().
+static void get_cmd_version(const char *bin, char *out, int outlen) {
+  out[0] = '\0';
+  if (!bin || !bin[0])
+    return;
+  char cmd[300];
+  snprintf(cmd, sizeof(cmd), "%s --version 2>/dev/null", bin);
+  FILE *fp = popen(cmd, "r");
+  if (!fp)
+    return;
+  char buf[256];
+  if (fgets(buf, sizeof(buf), fp)) {
+    char *ver = buf;
+    while (*ver && !(*ver >= '0' && *ver <= '9'))
+      ver++;
+    if (*ver) {
+      int len = 0;
+      while (ver[len] && ver[len] != ' ' && ver[len] != '(' &&
+             ver[len] != '\n' && len < 30)
+        len++;
+      memcpy(out, ver, len);
+      out[len] = '\0';
+    }
+  }
+  pclose(fp);
+}
+
 static void gather_title(void) {
   char user[64] = "";
   char host[64] = "";
@@ -1668,31 +1696,8 @@ static void gather_shell(void) {
   char *name = strrchr(shell, '/');
   name = name ? name + 1 : shell;
 
-  // Try to get version
-  char version[128] = "";
-  char cmd[256];
-  snprintf(cmd, sizeof(cmd), "%s --version 2>/dev/null", shell);
-  FILE *fp = popen(cmd, "r");
-  if (fp) {
-    char buf[256];
-    if (fgets(buf, sizeof(buf), fp)) {
-      // Find the first digit, more reliable than searching past the
-      // shell name, since some shells put a comma right after the name
-      // (e.g. fish: "fish, version 4.8.1", bash: "GNU bash, version 5.2.26...")
-      char *ver = buf;
-      while (*ver && !(*ver >= '0' && *ver <= '9'))
-        ver++;
-      if (*ver) {
-        int len = 0;
-        while (ver[len] && ver[len] != ' ' && ver[len] != '(' &&
-               ver[len] != '\n' && len < 30)
-          len++;
-        memcpy(version, ver, len);
-        version[len] = '\0';
-      }
-    }
-    pclose(fp);
-  }
+  char version[64] = "";
+  get_cmd_version(shell, version, sizeof(version));
 
   if (version[0])
     add_info("Shell", "%s %s", name, version);
@@ -1831,11 +1836,14 @@ static void gather_wm(void) {
   // Try to figure out the WM name. Process detection is most accurate
   // (e.g. dwl sets XDG_CURRENT_DESKTOP=sway for compat), so try that first.
   char wm[64] = "";
+  int wm_is_binary = 0; // true only if wm[] holds an actual invocable binary name
 
   // 1. Check env vars for specific WMs
   char *hyprland = getenv("HYPRLAND_INSTANCE_SIGNATURE");
-  if (hyprland)
+  if (hyprland) {
     strcpy(wm, "Hyprland");
+    wm_is_binary = 1;
+  }
 
   // 2. Try process list by scanning /proc/*/comm
   if (!wm[0]) {
@@ -1861,6 +1869,7 @@ static void gather_wm(void) {
           for (int i = 0; known_wms[i]; i++) {
             if (strcmp(comm, known_wms[i]) == 0) {
               strncpy(wm, comm, sizeof(wm) - 1);
+              wm_is_binary = 1;
               break;
             }
           }
@@ -1896,12 +1905,23 @@ static void gather_wm(void) {
       strncpy(wm, "Mutter", sizeof(wm) - 1);
     else if (strcasecmp(first, "Deepin") == 0)
       strncpy(wm, "KWin", sizeof(wm) - 1);
-    else
+    else {
+      // Not a known DE name — likely the WM's own name (e.g. niri),
+      // which is also a real invocable binary.
       strncpy(wm, desktop, sizeof(wm) - 1);
+      wm_is_binary = 1;
+    }
   }
 
-  if (wm[0])
-    add_info("WM", "%s%s", wm, is_wayland ? " (Wayland)" : "");
+  if (wm[0]) {
+    char version[64] = "";
+    if (wm_is_binary)
+      get_cmd_version(wm, version, sizeof(version));
+    if (version[0])
+      add_info("WM", "%s %s%s", wm, version, is_wayland ? " (Wayland)" : "");
+    else
+      add_info("WM", "%s%s", wm, is_wayland ? " (Wayland)" : "");
+  }
 #endif
 }
 
@@ -2683,8 +2703,14 @@ static void gather_terminal(void) {
     }
 #endif
   }
-  if (term[0])
-    add_info("Terminal", "%s", term);
+  if (term[0]) {
+    char version[64] = "";
+    get_cmd_version(term, version, sizeof(version));
+    if (version[0])
+      add_info("Terminal", "%s %s", term, version);
+    else
+      add_info("Terminal", "%s", term);
+  }
 }
 
 #ifndef __APPLE__
