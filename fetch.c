@@ -1261,6 +1261,13 @@ static void get_cmd_version(const char *bin, char *out, int outlen) {
   out[0] = '\0';
   if (!bin || !bin[0])
     return;
+  for (const char *p = bin; *p; p++) {
+    char c = *p;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '.' || c == '/' ||
+          c == '_' || c == '-'))
+      return;
+  }
   char cmd[300];
   snprintf(cmd, sizeof(cmd), "%s --version 2>/dev/null", bin);
   FILE *fp = popen(cmd, "r");
