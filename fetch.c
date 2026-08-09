@@ -2856,15 +2856,40 @@ static void gather_battery(void) {
     }
   }
 
+  char model[64] = "";
+  snprintf(path, sizeof(path), "/sys/class/power_supply/%s/model_name",
+           bat_name);
+  fp = fopen(path, "r");
+  if (!fp) {
+    snprintf(path, sizeof(path), "/sys/class/power_supply/%s/manufacturer",
+             bat_name);
+    fp = fopen(path, "r");
+  }
+  if (fp) {
+    if (fgets(model, sizeof(model), fp)) {
+      int len = strlen(model);
+      while (len > 0 && (model[len - 1] == '\n' || model[len - 1] == '\r' ||
+                         model[len - 1] == ' '))
+        model[--len] = '\0';
+    }
+    fclose(fp);
+  }
+
+  char label[80];
+  if (model[0])
+    snprintf(label, sizeof(label), "Battery (%s)", model);
+  else
+    snprintf(label, sizeof(label), "Battery");
+
   if (capacity >= 0) {
     const char *color = capacity >= 50 ? "32" : capacity >= 20 ? "93" : "31";
     if (time_str[0] && status[0])
-      add_info("Battery", "\033[%sm%d%%\033[0m (%s) [%s]", color, capacity,
+      add_info(label, "\033[%sm%d%%\033[0m (%s) [%s]", color, capacity,
                time_str, status);
     else if (status[0])
-      add_info("Battery", "\033[%sm%d%%\033[0m [%s]", color, capacity, status);
+      add_info(label, "\033[%sm%d%%\033[0m [%s]", color, capacity, status);
     else
-      add_info("Battery", "\033[%sm%d%%\033[0m", color, capacity);
+      add_info(label, "\033[%sm%d%%\033[0m", color, capacity);
   }
 #endif
 }

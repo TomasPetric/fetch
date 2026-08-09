@@ -177,7 +177,7 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 - **GPU** - DRM + `lspci` for full names (Linux), `system_profiler` (macOS)
 - **Memory/Swap** - `/proc/meminfo` (Linux), `vm_stat` (macOS)
 - **Disk** - `statvfs()` + `/proc/mounts` (Linux), `getmntinfo` (macOS) – supports multiple mount points via config
-- **Battery** - `energy_now/energy_full` (Linux), IOKit (macOS)
+- **Battery** - `energy_now/energy_full` plus `model_name` (Linux), IOKit (macOS)
 - **Packages** - emerge, pacman, dpkg, rpm, xbps, apk, flatpak, brew
 - **Local IP** - `getifaddrs()`
 
