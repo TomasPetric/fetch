@@ -3127,30 +3127,176 @@ static void gather_locale(void) {
     add_info("Locale", "%s", lang);
 }
 
-static void read_gtk_setting(const char *key, char *out, int maxlen) {
-  char path[512];
-  const char *home = getenv("HOME");
-  if (!home)
-    return;
-  snprintf(path, sizeof(path), "%s/.config/gtk-3.0/settings.ini", home);
+static int read_ini_key(const char *path, const char *section, const char *key,
+                        char *out, int maxlen) {
   FILE *fp = fopen(path, "r");
   if (!fp)
-    return;
-  char buf[256];
-  int keylen = strlen(key);
+    return 0;
+  char buf[512];
+  size_t keylen = strlen(key);
+  size_t seclen = section ? strlen(section) : 0;
+  int in_section = section ? 0 : 1;
+  int found = 0;
   while (fgets(buf, sizeof(buf), fp)) {
-    if (strncmp(buf, key, keylen) == 0 && buf[keylen] == '=') {
-      char *val = buf + keylen + 1;
-      int len = strlen(val);
-      while (len > 0 && (val[len - 1] == '\n' || val[len - 1] == '\r'))
-        val[--len] = '\0';
-      if (len > 0 && len < maxlen) {
-        memcpy(out, val, len + 1);
-      }
-      break;
+    char *line = buf;
+    while (*line == ' ' || *line == '\t')
+      line++;
+    int len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' ||
+                       line[len - 1] == ' ' || line[len - 1] == '\t'))
+      line[--len] = '\0';
+    if (line[0] == '[') {
+      if (section)
+        in_section = strncmp(line + 1, section, seclen) == 0 &&
+                     line[1 + seclen] == ']';
+      continue;
     }
+    if (!in_section || strncmp(line, key, keylen) != 0)
+      continue;
+    char *val = line + keylen;
+    while (*val == ' ' || *val == '\t')
+      val++;
+    if (*val != '=')
+      continue;
+    val++;
+    while (*val == ' ' || *val == '\t')
+      val++;
+    int vlen = strlen(val);
+    if (vlen >= 2 && ((val[0] == '"' && val[vlen - 1] == '"') ||
+                      (val[0] == '\'' && val[vlen - 1] == '\''))) {
+      val[vlen - 1] = '\0';
+      val++;
+      vlen -= 2;
+    }
+    if (vlen > 0 && vlen < maxlen) {
+      memcpy(out, val, vlen + 1);
+      found = 1;
+    }
+    break;
   }
   fclose(fp);
+  return found;
+}
+
+static int read_gtk3_setting(const char *key, char *out, int maxlen) {
+  const char *home = getenv("HOME");
+  if (!home)
+    return 0;
+  char path[512];
+  snprintf(path, sizeof(path), "%s/.config/gtk-3.0/settings.ini", home);
+  return read_ini_key(path, NULL, key, out, maxlen);
+}
+
+static int read_gtk2_setting(const char *key, char *out, int maxlen) {
+  const char *home = getenv("HOME");
+  if (!home)
+    return 0;
+  char path[512];
+  snprintf(path, sizeof(path), "%s/.gtkrc-2.0", home);
+  if (read_ini_key(path, NULL, key, out, maxlen))
+    return 1;
+  snprintf(path, sizeof(path), "%s/.config/gtk-2.0/gtkrc", home);
+  return read_ini_key(path, NULL, key, out, maxlen);
+}
+
+static void read_gtk_setting(const char *key, char *out, int maxlen) {
+  read_gtk3_setting(key, out, maxlen);
+}
+
+static int qtct_conf_path(char *out, size_t outsz) {
+  const char *home = getenv("HOME");
+  if (!home)
+    return 0;
+  static const char *variants[] = {"qt6ct/qt6ct.conf", "qt5ct/qt5ct.conf",
+                                   NULL};
+  const char *platform = getenv("QT_QPA_PLATFORMTHEME");
+  if (platform && strncmp(platform, "qt", 2) == 0) {
+    snprintf(out, outsz, "%s/.config/%s/%s.conf", home, platform, platform);
+    if (access(out, R_OK) == 0)
+      return 1;
+  }
+  for (int i = 0; variants[i]; i++) {
+    snprintf(out, outsz, "%s/.config/%s", home, variants[i]);
+    if (access(out, R_OK) == 0)
+      return 1;
+  }
+  return 0;
+}
+
+static int read_kdeglobals(const char *section, const char *key, char *out,
+                           int maxlen) {
+  const char *home = getenv("HOME");
+  if (!home)
+    return 0;
+  char path[512];
+  snprintf(path, sizeof(path), "%s/.config/kdeglobals", home);
+  return read_ini_key(path, section, key, out, maxlen);
+}
+
+static void qt_theme(char *out, int maxlen) {
+  char path[512];
+  if (qtct_conf_path(path, sizeof(path)) &&
+      read_ini_key(path, "Appearance", "style", out, maxlen) && out[0])
+    return;
+  if (read_kdeglobals("KDE", "widgetStyle", out, maxlen) && strstr(out, "ct-style"))
+    out[0] = '\0';
+}
+
+static void qt_icons(char *out, int maxlen) {
+  char path[512];
+  if (qtct_conf_path(path, sizeof(path)) &&
+      read_ini_key(path, "Appearance", "icon_theme", out, maxlen) && out[0])
+    return;
+  read_kdeglobals("Icons", "Theme", out, maxlen);
+}
+
+static void font_pt_format(char *font, size_t fontsz) {
+  char *last = strrchr(font, ' ');
+  if (!last || !last[1])
+    return;
+  for (const char *p = last + 1; *p; p++)
+    if (*p < '0' || *p > '9')
+      return;
+  char size[16];
+  snprintf(size, sizeof(size), "%s", last + 1);
+  size_t room = fontsz - (size_t)(last - font);
+  snprintf(last, room, " (%spt)", size);
+}
+
+static void qt_font(char *out, int maxlen) {
+  char path[512];
+  char raw[192] = "";
+  if (!qtct_conf_path(path, sizeof(path)))
+    return;
+  if (!read_ini_key(path, "Fonts", "general", raw, sizeof(raw)) || !raw[0])
+    return;
+  char *comma = strchr(raw, ',');
+  if (!comma)
+    return;
+  *comma = '\0';
+  char *size = comma + 1;
+  char *end = strchr(size, ',');
+  if (end)
+    *end = '\0';
+  snprintf(out, maxlen, "%s (%spt)", raw, size);
+}
+
+static void append_tagged(char *dst, size_t dstsz, const char *val,
+                          const char *tag) {
+  if (!val[0])
+    return;
+  size_t n = strlen(dst);
+  snprintf(dst + n, dstsz - n, "%s%s [%s]", n ? ", " : "", val, tag);
+}
+
+static void append_gtk_pair(char *dst, size_t dstsz, const char *gtk2,
+                            const char *gtk3) {
+  if (gtk2[0] && gtk3[0] && strcmp(gtk2, gtk3) == 0) {
+    append_tagged(dst, dstsz, gtk3, "GTK2/3");
+    return;
+  }
+  append_tagged(dst, dstsz, gtk2, "GTK2");
+  append_tagged(dst, dstsz, gtk3, "GTK3");
 }
 
 static void gather_theme(void) {
@@ -3169,10 +3315,14 @@ static void gather_theme(void) {
   else
     add_info("Theme", "Light");
 #else
-  char theme[64] = "";
-  read_gtk_setting("gtk-theme-name", theme, sizeof(theme));
-  if (theme[0])
-    add_info("Theme", "%s [GTK3]", theme);
+  char qt[64] = "", gtk2[64] = "", gtk3[64] = "", out[256] = "";
+  qt_theme(qt, sizeof(qt));
+  read_gtk2_setting("gtk-theme-name", gtk2, sizeof(gtk2));
+  read_gtk3_setting("gtk-theme-name", gtk3, sizeof(gtk3));
+  append_tagged(out, sizeof(out), qt, "Qt");
+  append_gtk_pair(out, sizeof(out), gtk2, gtk3);
+  if (out[0])
+    add_info("Theme", "%s", out);
 #endif
 }
 
@@ -3180,10 +3330,14 @@ static void gather_icons(void) {
 #ifdef __APPLE__
   add_info("Icons", "System");
 #else
-  char icons[64] = "";
-  read_gtk_setting("gtk-icon-theme-name", icons, sizeof(icons));
-  if (icons[0])
-    add_info("Icons", "%s [GTK3]", icons);
+  char qt[64] = "", gtk2[64] = "", gtk3[64] = "", out[256] = "";
+  qt_icons(qt, sizeof(qt));
+  read_gtk2_setting("gtk-icon-theme-name", gtk2, sizeof(gtk2));
+  read_gtk3_setting("gtk-icon-theme-name", gtk3, sizeof(gtk3));
+  append_tagged(out, sizeof(out), qt, "Qt");
+  append_gtk_pair(out, sizeof(out), gtk2, gtk3);
+  if (out[0])
+    add_info("Icons", "%s", out);
 #endif
 }
 
@@ -3201,10 +3355,16 @@ static void gather_font(void) {
   if (font[0])
     add_info("Font", "%s", font);
 #else
-  char font[128] = "";
-  read_gtk_setting("gtk-font-name", font, sizeof(font));
-  if (font[0])
-    add_info("Font", "%s [GTK3]", font);
+  char qt[128] = "", gtk2[128] = "", gtk3[128] = "", out[448] = "";
+  qt_font(qt, sizeof(qt));
+  read_gtk2_setting("gtk-font-name", gtk2, sizeof(gtk2));
+  read_gtk3_setting("gtk-font-name", gtk3, sizeof(gtk3));
+  font_pt_format(gtk2, sizeof(gtk2));
+  font_pt_format(gtk3, sizeof(gtk3));
+  append_tagged(out, sizeof(out), qt, "Qt");
+  append_gtk_pair(out, sizeof(out), gtk2, gtk3);
+  if (out[0])
+    add_info("Font", "%s", out);
 #endif
 }
 
