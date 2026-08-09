@@ -1,5 +1,7 @@
 #include <dirent.h>
+#include <fcntl.h>
 #include <math.h>
+#include <stdint.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -1712,6 +1714,189 @@ static void gather_shell(void) {
     add_info("Shell", "%s", name);
 }
 
+#ifndef __APPLE__
+struct drm_modeinfo_min {
+  uint32_t clock;
+  uint16_t hdisplay, hsync_start, hsync_end, htotal, hskew;
+  uint16_t vdisplay, vsync_start, vsync_end, vtotal, vscan;
+  uint32_t vrefresh;
+  uint32_t flags;
+  uint32_t type;
+  char name[32];
+};
+
+struct drm_crtc_min {
+  uint64_t set_connectors_ptr;
+  uint32_t count_connectors;
+  uint32_t crtc_id;
+  uint32_t fb_id;
+  uint32_t x, y;
+  uint32_t gamma_size;
+  uint32_t mode_valid;
+  struct drm_modeinfo_min mode;
+};
+
+struct drm_encoder_min {
+  uint32_t encoder_id;
+  uint32_t encoder_type;
+  uint32_t crtc_id;
+  uint32_t possible_crtcs;
+  uint32_t possible_clones;
+};
+
+struct drm_connector_min {
+  uint64_t encoders_ptr, modes_ptr, props_ptr, prop_values_ptr;
+  uint32_t count_modes, count_props, count_encoders;
+  uint32_t encoder_id, connector_id;
+  uint32_t connector_type, connector_type_id;
+  uint32_t connection;
+  uint32_t mm_width, mm_height;
+  uint32_t subpixel;
+  uint32_t pad;
+};
+
+#define DRM_MIN_GETCRTC _IOWR('d', 0xA1, struct drm_crtc_min)
+#define DRM_MIN_GETENCODER _IOWR('d', 0xA6, struct drm_encoder_min)
+#define DRM_MIN_GETCONNECTOR _IOWR('d', 0xA7, struct drm_connector_min)
+
+static int drm_active_mode(const char *card, uint32_t conn_id, int *w, int *h,
+                           float *hz, int *mm_w, int *mm_h) {
+  char dev[64];
+  snprintf(dev, sizeof(dev), "/dev/dri/%s", card);
+  int fd = open(dev, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return 0;
+
+  struct drm_connector_min conn;
+  memset(&conn, 0, sizeof(conn));
+  conn.connector_id = conn_id;
+  struct drm_modeinfo_min scratch;
+  conn.modes_ptr = (uint64_t)(uintptr_t)&scratch;
+  conn.count_modes = 1;
+  int got = 0;
+  if (ioctl(fd, DRM_MIN_GETCONNECTOR, &conn) == 0) {
+    if (conn.mm_width && conn.mm_height) {
+      *mm_w = (int)conn.mm_width;
+      *mm_h = (int)conn.mm_height;
+    }
+    struct drm_encoder_min enc;
+    memset(&enc, 0, sizeof(enc));
+    enc.encoder_id = conn.encoder_id;
+    if (conn.encoder_id && ioctl(fd, DRM_MIN_GETENCODER, &enc) == 0 &&
+        enc.crtc_id) {
+      struct drm_crtc_min crtc;
+      memset(&crtc, 0, sizeof(crtc));
+      crtc.crtc_id = enc.crtc_id;
+      if (ioctl(fd, DRM_MIN_GETCRTC, &crtc) == 0 && crtc.mode_valid &&
+          crtc.mode.htotal && crtc.mode.vtotal) {
+        *w = crtc.mode.hdisplay;
+        *h = crtc.mode.vdisplay;
+        float r = crtc.mode.clock * 1000.0f /
+                  ((float)crtc.mode.htotal * (float)crtc.mode.vtotal);
+        if (crtc.mode.flags & 0x10)
+          r *= 2.0f;
+        if (crtc.mode.flags & 0x20)
+          r /= 2.0f;
+        if (crtc.mode.vscan > 1)
+          r /= (float)crtc.mode.vscan;
+        *hz = r;
+        got = 1;
+      }
+    }
+  }
+  close(fd);
+  return got;
+}
+
+static int read_edid(const char *conn_dir, unsigned char *edid, size_t max) {
+  char path[320];
+  snprintf(path, sizeof(path), "/sys/class/drm/%s/edid", conn_dir);
+  FILE *fp = fopen(path, "rb");
+  if (!fp)
+    return 0;
+  size_t n = fread(edid, 1, max, fp);
+  fclose(fp);
+  if (n < 128)
+    return 0;
+  static const unsigned char hdr[8] = {0x00, 0xFF, 0xFF, 0xFF,
+                                       0xFF, 0xFF, 0xFF, 0x00};
+  return memcmp(edid, hdr, 8) == 0;
+}
+
+static void edid_name(const unsigned char *e, char *out, size_t outsz) {
+  out[0] = '\0';
+  for (int i = 54; i <= 108; i += 18) {
+    const unsigned char *d = e + i;
+    if (d[0] || d[1] || d[2] || d[3] != 0xFC)
+      continue;
+    size_t n = 0;
+    for (int j = 5; j < 18 && n + 1 < outsz; j++) {
+      if (d[j] == 0x0A)
+        break;
+      out[n++] = (char)d[j];
+    }
+    while (n > 0 && out[n - 1] == ' ')
+      n--;
+    out[n] = '\0';
+    if (out[0])
+      return;
+  }
+  unsigned v = ((unsigned)e[8] << 8) | e[9];
+  char m[4] = {(char)('A' + ((v >> 10) & 0x1F) - 1),
+               (char)('A' + ((v >> 5) & 0x1F) - 1),
+               (char)('A' + (v & 0x1F) - 1), '\0'};
+  for (int i = 0; i < 3; i++)
+    if (m[i] < 'A' || m[i] > 'Z')
+      return;
+  snprintf(out, outsz, "%s%02X%02X", m, e[11], e[10]);
+}
+
+static void edid_size_mm(const unsigned char *e, int *w, int *h) {
+  const unsigned char *d = e + 54;
+  if (d[0] || d[1]) {
+    int mw = d[12] | ((d[14] & 0xF0) << 4);
+    int mh = d[13] | ((d[14] & 0x0F) << 8);
+    if (mw > 0 && mh > 0) {
+      *w = mw;
+      *h = mh;
+      return;
+    }
+  }
+  if (e[21] && e[22]) {
+    *w = e[21] * 10;
+    *h = e[22] * 10;
+  }
+}
+
+static float edid_refresh(const unsigned char *e) {
+  const unsigned char *d = e + 54;
+  unsigned clock = d[0] | ((unsigned)d[1] << 8);
+  if (!clock)
+    return 0;
+  unsigned htotal = (d[2] | ((d[4] & 0xF0) << 4)) + (d[3] | ((d[4] & 0x0F) << 8));
+  unsigned vtotal = (d[5] | ((d[7] & 0xF0) << 4)) + (d[6] | ((d[7] & 0x0F) << 8));
+  if (!htotal || !vtotal)
+    return 0;
+  return clock * 10000.0f / (float)(htotal * vtotal);
+}
+
+static void format_hz(float hz, char *out, size_t outsz) {
+  if (hz <= 0.0f) {
+    out[0] = '\0';
+    return;
+  }
+  if (fabsf(hz - roundf(hz)) < 0.05f)
+    snprintf(out, outsz, "%.0f Hz", hz);
+  else
+    snprintf(out, outsz, "%.2f Hz", hz);
+}
+
+static int connector_is_internal(const char *conn) {
+  return strncmp(conn, "eDP", 3) == 0 || strncmp(conn, "LVDS", 4) == 0 ||
+         strncmp(conn, "DSI", 3) == 0;
+}
+#endif
+
 static void gather_display(void) {
 #ifdef __APPLE__
   FILE *fp = popen("system_profiler SPDisplaysDataType 2>/dev/null", "r");
@@ -1766,7 +1951,7 @@ static void gather_display(void) {
     if (!dash)
       continue;
 
-    char path[256];
+    char path[320];
     snprintf(path, sizeof(path), "/sys/class/drm/%s/status", ent->d_name);
     FILE *fp = fopen(path, "r");
     if (!fp)
@@ -1795,7 +1980,61 @@ static void gather_display(void) {
     if (!mode[0])
       continue;
 
-    add_info("Display", "%s @ %s", dash + 1, mode);
+    const char *conn = dash + 1;
+    char card[32];
+    size_t card_len = (size_t)(dash - ent->d_name);
+    if (card_len >= sizeof(card))
+      continue;
+    memcpy(card, ent->d_name, card_len);
+    card[card_len] = '\0';
+
+    unsigned char edid[256];
+    int have_edid = read_edid(ent->d_name, edid, sizeof(edid));
+
+    int w = 0, h = 0, mm_w = 0, mm_h = 0;
+    float hz = 0.0f;
+    unsigned conn_id = 0;
+    snprintf(path, sizeof(path), "/sys/class/drm/%s/connector_id",
+             ent->d_name);
+    fp = fopen(path, "r");
+    if (fp) {
+      if (fscanf(fp, "%u", &conn_id) != 1)
+        conn_id = 0;
+      fclose(fp);
+    }
+    if (conn_id)
+      drm_active_mode(card, conn_id, &w, &h, &hz, &mm_w, &mm_h);
+
+    if (hz <= 0.0f && have_edid)
+      hz = edid_refresh(edid);
+    if ((!mm_w || !mm_h) && have_edid)
+      edid_size_mm(edid, &mm_w, &mm_h);
+
+    char res[32];
+    if (w > 0 && h > 0)
+      snprintf(res, sizeof(res), "%dx%d", w, h);
+    else
+      snprintf(res, sizeof(res), "%s", mode);
+
+    char label[80];
+    char name[32] = "";
+    if (have_edid)
+      edid_name(edid, name, sizeof(name));
+    snprintf(label, sizeof(label), "Display (%s)", name[0] ? name : conn);
+
+    char inches[16] = "";
+    if (mm_w > 0 && mm_h > 0) {
+      int diag = (int)lroundf(
+          sqrtf((float)(mm_w * mm_w + mm_h * mm_h)) / 25.4f);
+      if (diag > 0)
+        snprintf(inches, sizeof(inches), " in %d\"", diag);
+    }
+    char rate[32];
+    format_hz(hz, rate, sizeof(rate));
+    const char *sep = rate[0] ? (inches[0] ? ", " : " @ ") : "";
+
+    add_info(label, "%s%s%s%s [%s]", res, inches, sep, rate,
+             connector_is_internal(conn) ? "Built-in" : "External");
     emitted++;
   }
   closedir(d);
@@ -1807,7 +2046,7 @@ static void gather_display(void) {
     while ((ent = readdir(d))) {
       if (strncmp(ent->d_name, "card", 4) != 0)
         continue;
-      char path[256];
+      char path[320];
       snprintf(path, sizeof(path), "/sys/class/drm/%s/modes", ent->d_name);
       FILE *fp = fopen(path, "r");
       if (!fp)

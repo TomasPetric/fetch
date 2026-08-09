@@ -169,7 +169,7 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 - **Uptime** - `/proc/uptime`
 - **Packages** - emerge, pacman, dpkg, rpm, xbps, apk
 - **Shell** - parent process detection (not just `$SHELL`)
-- **Display** - per-connector DRM enumeration (multi-monitor)
+- **Display** - per-connector DRM enumeration (multi-monitor): active resolution and refresh rate from the CRTC mode, monitor name and physical size from EDID, built-in vs external
 - **WM** - process scanning + DE-to-WM mapping
 - **Theme/Icons/Font** - `~/.config/gtk-3.0/settings.ini` (Linux), `defaults read` (macOS)
 - **Cursor** - `~/.config/gtk-3.0/settings.ini` (Linux only)
