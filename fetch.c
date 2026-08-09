@@ -2208,6 +2208,9 @@ static void gather_cpu(void) {
           if (len > 0 && len < (int)sizeof(name)) {
             memcpy(name, val, len);
             name[len] = '\0';
+            char *at = strstr(name, " @ ");
+            if (at)
+              *at = '\0';
           }
         }
       }
