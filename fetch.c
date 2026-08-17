@@ -3480,14 +3480,14 @@ static void apply_layout(int show_info) {
     rows--; // leave 1 row margin to prevent scroll-jitter
 
   // Ideal height: config/flag override > auto-fit to info lines > default
-  int ideal = 36;
+  int ideal = (int)(36 * size_scale);
   if (config_height > 0) {
     ideal = config_height;
   } else if (show_info && fetch_line_count > 0) {
     int info_height = fetch_line_count + 2;
-    ideal = info_height > 36 ? info_height : 36;
+    if (ideal < info_height)
+      ideal = info_height;
   }
-  ideal = (int)(ideal * size_scale);
   if (ideal < 20)
     ideal = 20;
   if (ideal > MAX_HEIGHT)
