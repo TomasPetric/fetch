@@ -1393,22 +1393,25 @@ static void gather_host(void) {
     add_info("Host", "%s", model);
 #else
   char model[128] = "";
+  char vendor[64] = "";
+
   // Try device-tree first (ARM/Apple Silicon), then DMI (x86)
-  FILE *fp = fopen("/proc/device-tree/model", "r");
-  if (!fp)
-    fp = fopen("/sys/class/dmi/id/product_name", "r");
-  if (fp) {
-    if (fgets(model, sizeof(model), fp)) {
-      int len = strlen(model);
-      while (len > 0 && (model[len - 1] == '\n' || model[len - 1] == '\r' ||
-                         model[len - 1] == '\0'))
-        len--;
-      model[len] = '\0';
-    }
-    fclose(fp);
+  if (!try_read_first_line("/proc/device-tree/model", model, sizeof(model))) {
+    if (try_read_first_line("/sys/class/dmi/id/product_name", model, sizeof(model)))
+      try_read_first_line("/sys/class/dmi/id/sys_vendor", vendor, sizeof(vendor));
   }
-  if (model[0])
-    add_info("Host", "%s", model);
+
+  // Some boards already embed the vendor name in product_name
+  // don't duplicate it if so.
+  if (vendor[0] && strncasecmp(model, vendor, strlen(vendor)) == 0)
+    vendor[0] = '\0';
+
+  if (model[0]) {
+    if (vendor[0])
+      add_info("Host", "%s %s", vendor, model);
+    else
+      add_info("Host", "%s", model);
+  }
 #endif
 }
 
