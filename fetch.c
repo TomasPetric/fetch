@@ -1369,6 +1369,23 @@ static void gather_os(void) {
 #endif
 }
 
+// Reads the first line of a small pseudo-file (e.g. under /sys or /proc)
+// into out, trimming the trailing newline. Returns 1 on success, 0 if the
+// file couldn't be opened or was empty.
+static int try_read_first_line(const char *path, char *out, int outlen) {
+  out[0] = '\0';
+  FILE *fp = fopen(path, "r");
+  if (!fp)
+    return 0;
+  if (fgets(out, outlen, fp)) {
+    int len = strlen(out);
+    while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r'))
+      out[--len] = '\0';
+  }
+  fclose(fp);
+  return out[0] != '\0';
+}
+
 static void gather_host(void) {
 #ifdef __APPLE__
   char model[128] = "";
