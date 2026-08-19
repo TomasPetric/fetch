@@ -857,6 +857,7 @@ enum {
   F_SHELL,
   F_DISPLAY,
   F_WM,
+  F_DISPLAYMANAGER,
   F_THEME,
   F_ICONS,
   F_FONT,
@@ -912,6 +913,7 @@ static const struct {
                  {"shell", F_SHELL},
                  {"display", F_DISPLAY},
                  {"wm", F_WM},
+                 {"displaymanager", F_DISPLAYMANAGER},
                  {"theme", F_THEME},
                  {"icons", F_ICONS},
                  {"font", F_FONT},
@@ -931,9 +933,9 @@ static const struct {
 static void config_defaults(void) {
   // Default order
   int defaults[] = {
-      F_OS,     F_HOST,  F_KERNEL, F_UPTIME,  F_PACKAGES, F_SHELL,    F_DISPLAY,
-      F_WM,     F_THEME, F_ICONS,  F_FONT,    F_CURSOR,   F_TERMINAL, F_CPU,
-      F_GPU,    F_MEMORY, F_SWAP,  F_DISK,    F_IP,       F_BATTERY,  F_LOCALE,
+      F_OS, F_HOST,  F_KERNEL, F_UPTIME, F_PACKAGES, F_SHELL, F_DISPLAY,
+      F_WM, F_DISPLAYMANAGER, F_THEME, F_ICONS, F_FONT, F_CURSOR, F_TERMINAL, 
+      F_CPU, F_GPU, F_MEMORY, F_SWAP, F_DISK, F_IP, F_BATTERY,  F_LOCALE,
       F_COLORS};
   field_count = sizeof(defaults) / sizeof(defaults[0]);
   for (int i = 0; i < field_count; i++) {
@@ -2188,6 +2190,50 @@ static void gather_wm(void) {
     else
       add_info("WM", "%s%s", wm, is_wayland ? " (Wayland)" : "");
   }
+#endif
+}
+
+static void gather_displaymanager(void) {
+#ifndef __APPLE__
+  FILE *fp = fopen("/etc/systemd/system/display-manager.service", "r");
+  if (!fp)
+    return;
+
+  char content[4096] = "";
+  size_t total = fread(content, 1, sizeof(content) - 1, fp);
+  content[total] = '\0';
+  fclose(fp);
+
+  static const struct {
+    const char *id;
+    const char *label;
+  } known[] = {
+      {"sddm", "SDDM"},       {"gdm", "GDM"},         {"lightdm", "LightDM"},
+      {"lxdm", "LXDM"},       {"greetd", "greetd"},   {"xdm", "XDM"},
+      {"slim", "SLiM"},       {"lemurs", "lemurs"},   {"ly", "ly"},
+      {NULL, NULL},
+  };
+
+  const char *display_name = NULL;
+  for (int i = 0; known[i].id; i++) {
+    // Case-insensitive substring search.
+    size_t idlen = strlen(known[i].id);
+    for (const char *p = content; *p; p++) {
+      size_t j = 0;
+      while (j < idlen && tolower((unsigned char)p[j]) ==
+                              tolower((unsigned char)known[i].id[j]))
+        j++;
+      if (j == idlen) {
+        display_name = known[i].label;
+        break;
+      }
+    }
+    if (display_name)
+      break;
+  }
+
+  if (display_name)
+    add_info("Display Manager", "%s", display_name);
 #endif
 }
 
@@ -3891,8 +3937,8 @@ int main(int argc, char **argv) {
           "  Comment out or remove fields to hide them.\n"
           "  Available fields:\n"
           "    os, host, kernel, uptime, packages, shell, display, wm,\n"
-          "    theme, icons, font, cursor, terminal, cpu, gpu, memory, swap,\n"
-          "    disk, ip, battery, locale, colors\n\n"
+          "    displaymanager, theme, icons, font, cursor, terminal, cpu,\n"
+          "    gpu, memory, swap, disk, ip, battery, locale, colors\n\n"
           "  Extra disks:\n"
           "    disk=/home               Show additional mount point\n"
           "    disk=/data               (repeat for multiple mounts)\n\n"
@@ -4080,6 +4126,7 @@ int main(int argc, char **argv) {
       [F_SHELL] = gather_shell,
       [F_DISPLAY] = gather_display,
       [F_WM] = gather_wm,
+      [F_DISPLAYMANAGER] = gather_displaymanager,
       [F_THEME] = gather_theme,
       [F_ICONS] = gather_icons,
       [F_FONT] = gather_font,
