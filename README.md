@@ -167,7 +167,7 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 - **Host** - `/proc/device-tree/model` or `/sys/class/dmi/id/product_name`
 - **Kernel** - `uname()`
 - **Uptime** - `/proc/uptime`
-- **Packages** - emerge, pacman, dpkg, rpm, xbps, apk,
+- **Packages** - emerge, pacman, dpkg, rpm, xbps, apk, flatpak, brew, nixpkgs
 - **Shell** - parent process detection (not just `$SHELL`)
 - **Display** - per-connector DRM enumeration (multi-monitor): active resolution and refresh rate from the CRTC mode, monitor name and physical size from EDID, built-in vs external
 - **WM** - process scanning + DE-to-WM mapping
@@ -179,7 +179,6 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 - **Memory/Swap** - `/proc/meminfo` (Linux), `vm_stat` (macOS)
 - **Disk** - `statvfs()` + `/proc/mounts` (Linux), `getmntinfo` (macOS) – supports multiple mount points via config
 - **Battery** - `energy_now/energy_full` plus `model_name` (Linux), IOKit (macOS)
-- **Packages** - emerge, pacman, dpkg, rpm, xbps, apk, flatpak, brew
 - **Local IP** - `getifaddrs()`
 
 Stats like memory, battery, and uptime update in real-time while the logo spins.
