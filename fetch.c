@@ -857,6 +857,7 @@ enum {
   F_SHELL,
   F_DISPLAY,
   F_WM,
+  F_DISPLAYMANAGER,
   F_THEME,
   F_ICONS,
   F_FONT,
@@ -912,6 +913,7 @@ static const struct {
                  {"shell", F_SHELL},
                  {"display", F_DISPLAY},
                  {"wm", F_WM},
+                 {"displaymanager", F_DISPLAYMANAGER},
                  {"theme", F_THEME},
                  {"icons", F_ICONS},
                  {"font", F_FONT},
@@ -2187,6 +2189,64 @@ static void gather_wm(void) {
       add_info("WM", "%s %s%s", wm, version, is_wayland ? " (Wayland)" : "");
     else
       add_info("WM", "%s%s", wm, is_wayland ? " (Wayland)" : "");
+  }
+#endif
+}
+
+static void gather_displaymanager(void) {
+#ifndef __APPLE__
+  static const char *known_dms[] = {"sddm",    "gdm",   "gdm3", "lightdm",
+                                    "lxdm",    "greetd", "xdm",  "slim",
+                                    "lemurs",  "ly",    NULL};
+  static const struct {
+    const char *id;
+    const char *label;
+  } labels[] = {
+      {"sddm", "SDDM"},       {"gdm", "GDM"},         {"gdm3", "GDM"},
+      {"lightdm", "LightDM"}, {"lxdm", "LXDM"},       {"greetd", "greetd"},
+      {"xdm", "XDM"},         {"slim", "SLiM"},       {"lemurs", "lemurs"},
+      {"ly", "ly"},           {NULL, NULL},
+  };
+  const char *matched_id = NULL;
+
+  // Scan running processes, portable across init systems (works on
+  // Gentoo/OpenRC, runit, s6, etc.), and reflects what's running
+  // right now rather than what's just enabled.
+  DIR *proc = opendir("/proc");
+  if (proc) {
+    struct dirent *ent;
+    while ((ent = readdir(proc)) && !matched_id) {
+      if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
+        continue;
+      char path[64];
+      snprintf(path, sizeof(path), "/proc/%s/comm", ent->d_name);
+      FILE *fp = fopen(path, "r");
+      if (!fp)
+        continue;
+      char comm[64] = "";
+      if (fgets(comm, sizeof(comm), fp)) {
+        int len = strlen(comm);
+        while (len > 0 && (comm[len - 1] == '\n' || comm[len - 1] == '\r'))
+          comm[--len] = '\0';
+        for (int i = 0; known_dms[i]; i++) {
+          if (strcmp(comm, known_dms[i]) == 0) {
+            matched_id = known_dms[i];
+            break;
+          }
+        }
+      }
+      fclose(fp);
+    }
+    closedir(proc);
+  }
+
+  if (matched_id) {
+    for (int i = 0; labels[i].id; i++) {
+      if (strcmp(labels[i].id, matched_id) == 0) {
+        add_info("Display Manager", "%s", labels[i].label);
+        break;
+      }
+    }
   }
 #endif
 }
@@ -3891,8 +3951,8 @@ int main(int argc, char **argv) {
           "  Comment out or remove fields to hide them.\n"
           "  Available fields:\n"
           "    os, host, kernel, uptime, packages, shell, display, wm,\n"
-          "    theme, icons, font, cursor, terminal, cpu, gpu, memory, swap,\n"
-          "    disk, ip, battery, locale, colors\n\n"
+          "    displaymanager, theme, icons, font, cursor, terminal, cpu,\n"
+          "    gpu, memory, swap, disk, ip, battery, locale, colors\n\n"
           "  Extra disks:\n"
           "    disk=/home               Show additional mount point\n"
           "    disk=/data               (repeat for multiple mounts)\n\n"
@@ -4080,6 +4140,7 @@ int main(int argc, char **argv) {
       [F_SHELL] = gather_shell,
       [F_DISPLAY] = gather_display,
       [F_WM] = gather_wm,
+      [F_DISPLAYMANAGER] = gather_displaymanager,
       [F_THEME] = gather_theme,
       [F_ICONS] = gather_icons,
       [F_FONT] = gather_font,
