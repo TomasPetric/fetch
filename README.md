@@ -171,7 +171,7 @@ All system info is gathered natively – no fastfetch or neofetch needed:
 - **Shell** - parent process detection (not just `$SHELL`)
 - **Display** - per-connector DRM enumeration (multi-monitor): active resolution and refresh rate from the CRTC mode, monitor name and physical size from EDID, built-in vs external
 - **WM** - process scanning + DE-to-WM mapping
-- **Display Manager** - assumes systemd `/etc/systemd/system/display-manager.service`
+- **Display Manager** - process scanning
 - **Theme/Icons/Font** - `~/.config/gtk-3.0/settings.ini`, `~/.gtkrc-2.0`, and Qt (`qt6ct`/`qt5ct`, `~/.config/kdeglobals`) on Linux, `defaults read` (macOS)
 - **Cursor** - `~/.config/gtk-3.0/settings.ini` (Linux only)
 - **CPU** - `/proc/cpuinfo`, device-tree (Apple Silicon), or `sysctl` (macOS)
