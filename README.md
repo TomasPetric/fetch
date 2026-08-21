@@ -33,6 +33,8 @@ sudo make install
 <summary><h2>Package managers</h2></summary>
 
 ### Arch Linux (AUR)
+Maintainer: [@PlayRood32](https://github.com/PlayRood32)
+
 You can install `fetch-git` from the AUR using your favorite AUR helper:
 
 ```bash
@@ -43,9 +45,11 @@ or
 paru -S fetch-git
 ```
 
-The `fetch-git` AUR package was not compromised in the AUR package hack. It is maintained and up to date.
+*The `fetch-git` AUR package was not compromised in the AUR package hack. It is maintained and up to date.*
 
 ### Nix
+Maintainer: [@Ghastrum](https://github.com/Ghastrum)
+
 Fetch is available in **[nixpkgs unstable](https://search.nixos.org/packages?channel=unstable&query=fetch#show=fetch)**, or as a [flake](https://github.com/areofyl/fetch/tree/main/nix).
 
 **Try out fetch!**
@@ -64,12 +68,16 @@ environment.systemPackages = [
 ```
 
 ### Homebrew (macOS)
+Maintainer: [@areofyl](https://github.com/areofyl)
+
 ```bash
 brew tap areofyl/fetch
 brew install fetch-git
 ```
 
 ### Fedora Linux
+Maintainer: [@RealOrangeKun](https://github.com/RealOrangeKun)
+
 You can install `fetch` from COPR:
 
 ```bash
@@ -86,6 +94,8 @@ sudo dnf install ~/rpmbuild/RPMS/*/fetch-*.rpm
 ```
 
 ### openSUSE
+Maintainer: [@RealOrangeKun](https://github.com/RealOrangeKun)
+
 You can install `fetch` from the Open Build Service:
 
 ```bash
@@ -103,6 +113,8 @@ sudo zypper install ~/rpmbuild/RPMS/*/fetch-*.rpm
 ```
 
 ### Ubuntu / Debian
+Maintainer: [@RealOrangeKun](https://github.com/RealOrangeKun)
+
 You can install `fetch` from the PPA:
 
 ```bash
@@ -120,6 +132,8 @@ sudo apt install ../fetch_*.deb
 ```
 
 ### Gentoo Linux (GURU)
+Maintainer: [@Leb02](https://github.com/Leb02)
+
 You can install `fetch` from the GURU repository using:
 
 ```bash
@@ -293,7 +307,7 @@ If you want to chat about ideas before writing code, reach out on
 
 ## How it works
 
-For a deep dive with visuals and code, see the [full blog post](https://areofyl.github.io/blog/post.html?p=how-fetch-works).
+For a deep dive with visuals and code, see the [full blog post](https://asdesai.com/blog/how-fetch-works/).
 
 1. **Logo loading** – reads ASCII/Unicode art from `~/.config/fetch/logo.txt` or
    grabs a distro logo via fastfetch. ANSI color codes are parsed and preserved
