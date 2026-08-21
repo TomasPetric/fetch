@@ -934,7 +934,7 @@ static void config_defaults(void) {
   // Default order
   int defaults[] = {
       F_OS, F_HOST,  F_KERNEL, F_UPTIME, F_PACKAGES, F_SHELL, F_DISPLAY,
-      F_WM, F_DISPLAYMANAGER, F_THEME, F_ICONS, F_FONT, F_CURSOR, F_TERMINAL, 
+      F_WM, F_THEME, F_ICONS, F_FONT, F_CURSOR, F_TERMINAL, 
       F_CPU, F_GPU, F_MEMORY, F_SWAP, F_DISK, F_IP, F_BATTERY,  F_LOCALE,
       F_COLORS};
   field_count = sizeof(defaults) / sizeof(defaults[0]);
@@ -2195,45 +2195,59 @@ static void gather_wm(void) {
 
 static void gather_displaymanager(void) {
 #ifndef __APPLE__
-  FILE *fp = fopen("/etc/systemd/system/display-manager.service", "r");
-  if (!fp)
-    return;
-
-  char content[4096] = "";
-  size_t total = fread(content, 1, sizeof(content) - 1, fp);
-  content[total] = '\0';
-  fclose(fp);
-
+  static const char *known_dms[] = {"sddm",    "gdm",   "gdm3", "lightdm",
+                                    "lxdm",    "greetd", "xdm",  "slim",
+                                    "lemurs",  "ly",    NULL};
   static const struct {
     const char *id;
     const char *label;
-  } known[] = {
-      {"sddm", "SDDM"},       {"gdm", "GDM"},         {"lightdm", "LightDM"},
-      {"lxdm", "LXDM"},       {"greetd", "greetd"},   {"xdm", "XDM"},
-      {"slim", "SLiM"},       {"lemurs", "lemurs"},   {"ly", "ly"},
-      {NULL, NULL},
+  } labels[] = {
+      {"sddm", "SDDM"},       {"gdm", "GDM"},         {"gdm3", "GDM"},
+      {"lightdm", "LightDM"}, {"lxdm", "LXDM"},       {"greetd", "greetd"},
+      {"xdm", "XDM"},         {"slim", "SLiM"},       {"lemurs", "lemurs"},
+      {"ly", "ly"},           {NULL, NULL},
   };
+  const char *matched_id = NULL;
 
-  const char *display_name = NULL;
-  for (int i = 0; known[i].id; i++) {
-    // Case-insensitive substring search.
-    size_t idlen = strlen(known[i].id);
-    for (const char *p = content; *p; p++) {
-      size_t j = 0;
-      while (j < idlen && tolower((unsigned char)p[j]) ==
-                              tolower((unsigned char)known[i].id[j]))
-        j++;
-      if (j == idlen) {
-        display_name = known[i].label;
+  // Scan running processes, portable across init systems (works on
+  // Gentoo/OpenRC, runit, s6, etc.), and reflects what's running
+  // right now rather than what's just enabled.
+  DIR *proc = opendir("/proc");
+  if (proc) {
+    struct dirent *ent;
+    while ((ent = readdir(proc)) && !matched_id) {
+      if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
+        continue;
+      char path[64];
+      snprintf(path, sizeof(path), "/proc/%s/comm", ent->d_name);
+      FILE *fp = fopen(path, "r");
+      if (!fp)
+        continue;
+      char comm[64] = "";
+      if (fgets(comm, sizeof(comm), fp)) {
+        int len = strlen(comm);
+        while (len > 0 && (comm[len - 1] == '\n' || comm[len - 1] == '\r'))
+          comm[--len] = '\0';
+        for (int i = 0; known_dms[i]; i++) {
+          if (strcmp(comm, known_dms[i]) == 0) {
+            matched_id = known_dms[i];
+            break;
+          }
+        }
+      }
+      fclose(fp);
+    }
+    closedir(proc);
+  }
+
+  if (matched_id) {
+    for (int i = 0; labels[i].id; i++) {
+      if (strcmp(labels[i].id, matched_id) == 0) {
+        add_info("Display Manager", "%s", labels[i].label);
         break;
       }
     }
-    if (display_name)
-      break;
   }
-
-  if (display_name)
-    add_info("Display Manager", "%s", display_name);
 #endif
 }
 
