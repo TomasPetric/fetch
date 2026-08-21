@@ -573,7 +573,7 @@ static int is_cursor_escape(const char *p) {
 static int load_logo_ff_colored(const char *name) {
   char cmd[256];
   snprintf(cmd, sizeof(cmd),
-           "fastfetch -l %s -s break --pipe false 2>/dev/null", name);
+           "fastfetch -c none -l %s -s break --pipe false 2>/dev/null", name);
   FILE *fp = popen(cmd, "r");
   if (!fp)
     return 0;
