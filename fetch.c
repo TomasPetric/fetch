@@ -627,7 +627,7 @@ static int load_logo_ff_colored(const char *name) {
 
 // Fallback: load from --print-logos (no colors, but works on older fastfetch)
 static int load_logo_ff_plain(const char *name) {
-  FILE *fp = popen("fastfetch --print-logos 2>/dev/null", "r");
+  FILE *fp = popen("fastfetch -c none --print-logos 2>/dev/null", "r");
   if (!fp)
     return 0;
 
@@ -715,7 +715,7 @@ static int parse_os_release_val(const char *buf, int prefix_len, char *out,
 static char distro_id_like[64] = "";
 
 static int detect_distro_fastfetch(char *out, int maxlen) {
-  FILE *fp = popen("fastfetch --json 2>/dev/null", "r");
+  FILE *fp = popen("fastfetch -c none --json 2>/dev/null", "r");
   if (!fp)
     return 0;
   char buf[1024];
