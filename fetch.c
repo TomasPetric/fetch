@@ -36,7 +36,7 @@ static int termios_saved = 0;
 static void cleanup(void) {
   if (termios_saved)
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
-  printf("\033[?25h");
+  printf("\033[?1002l\033[?1006l\033[?25h");
   fflush(stdout);
 }
 
@@ -4208,13 +4208,87 @@ int main(int argc, char **argv) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
   }
 
-  printf("\033[?25l\033[2J");
+  printf("\033[?25l\033[?1002h\033[?1006h\033[2J");
   fflush(stdout);
 
+  int mouse_dragging = 0;
+  int mouse_last_x = 0, mouse_last_y = 0;
+  float drag_vx = 0.0f, drag_vy = 0.0f;
+
   for (int frame = 0; max_frames == 0 || frame < max_frames; frame++) {
+    // Read input: mouse events control rotation, any other key exits
+    int should_break = 0;
     struct pollfd pfd = {.fd = STDIN_FILENO, .events = POLLIN};
-    if (poll(&pfd, 1, 0) > 0)
-      break;
+    while (poll(&pfd, 1, 0) > 0) {
+      // Accumulate into a static buffer to handle partial escape reads
+      static char ibuf[128];
+      static int ibuf_len = 0;
+      int n = read(STDIN_FILENO, ibuf + ibuf_len, sizeof(ibuf) - ibuf_len);
+      if (n <= 0) { should_break = 1; break; }
+      ibuf_len += n;
+
+      int i = 0;
+      while (i < ibuf_len) {
+        if (ibuf[i] == '\033') {
+          // Check if we have enough for SGR mouse: \033[<btn;x;y[Mm]
+          if (i + 2 >= ibuf_len) break; // need more data
+          if (ibuf[i+1] == '[' && ibuf[i+2] == '<') {
+            int j = i + 3;
+            int btn = 0, mx = 0, my = 0;
+            while (j < ibuf_len && ibuf[j] >= '0' && ibuf[j] <= '9')
+              btn = btn * 10 + (ibuf[j++] - '0');
+            if (j >= ibuf_len) break; // need more
+            if (ibuf[j] == ';') j++;
+            while (j < ibuf_len && ibuf[j] >= '0' && ibuf[j] <= '9')
+              mx = mx * 10 + (ibuf[j++] - '0');
+            if (j >= ibuf_len) break;
+            if (ibuf[j] == ';') j++;
+            while (j < ibuf_len && ibuf[j] >= '0' && ibuf[j] <= '9')
+              my = my * 10 + (ibuf[j++] - '0');
+            if (j >= ibuf_len) break;
+            char trail = ibuf[j++];
+            if (trail != 'M' && trail != 'm') { i = j; continue; }
+
+            if (btn == 0 && trail == 'M') {
+              mouse_dragging = 1;
+              mouse_last_x = mx;
+              mouse_last_y = my;
+              drag_vx = 0.0f;
+              drag_vy = 0.0f;
+            } else if (btn == 32 && trail == 'M' && mouse_dragging) {
+              int dx = mx - mouse_last_x;
+              int dy = my - mouse_last_y;
+              drag_vy = -dx * 0.03f;
+              drag_vx = -dy * 0.03f;
+              B += drag_vy;
+              A += drag_vx;
+              mouse_last_x = mx;
+              mouse_last_y = my;
+            } else if (btn == 0 && trail == 'm') {
+              mouse_dragging = 0;
+            }
+            i = j;
+          } else {
+            // Some other escape sequence, skip it
+            i++;
+            while (i < ibuf_len && ibuf[i] < 0x40) i++;
+            if (i < ibuf_len) i++;
+          }
+        } else {
+          should_break = 1;
+          break;
+        }
+      }
+      // Shift remaining partial data to front
+      if (i > 0 && i < ibuf_len) {
+        memmove(ibuf, ibuf + i, ibuf_len - i);
+        ibuf_len -= i;
+      } else if (i >= ibuf_len) {
+        ibuf_len = 0;
+      }
+      if (should_break) break;
+    }
+    if (should_break) break;
     // Handle terminal resize: recompute the same layout as startup
     if (term_resized) {
       term_resized = 0;
@@ -4251,8 +4325,15 @@ int main(int argc, char **argv) {
     }
 
     clear_buf();
-    A += rotate_x ? 0.04f * speed : 0.0f;
-    B += rotate_y ? 0.06f * speed : 0.0f;
+    if (!mouse_dragging) {
+      if (drag_vx != 0.0f || drag_vy != 0.0f) {
+        A += drag_vx;
+        B += drag_vy;
+      } else {
+        A += rotate_x ? 0.04f * speed : 0.0f;
+        B += rotate_y ? 0.06f * speed : 0.0f;
+      }
+    }
     float cA = cosf(A), sA = sinf(A);
     float cB = cosf(B), sB = sinf(B);
 
