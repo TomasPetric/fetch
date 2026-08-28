@@ -24,8 +24,10 @@
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <sys/mount.h>
+#ifndef LEGACY_IOKIT
 #include <IOKit/ps/IOPowerSources.h>
 #include <IOKit/ps/IOPSKeys.h>
+#endif
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
@@ -2765,7 +2767,7 @@ static void gather_disk(void) {
 }
 
 static void gather_battery(void) {
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(LEGACY_IOKIT)
   CFTypeRef info = IOPSCopyPowerSourcesInfo();
   if (!info) return;
   CFArrayRef sources = IOPSCopyPowerSourcesList(info);
@@ -4216,28 +4218,42 @@ int main(int argc, char **argv) {
   float drag_vx = 0.0f, drag_vy = 0.0f;
 
   for (int frame = 0; max_frames == 0 || frame < max_frames; frame++) {
-    // Read input: mouse events control rotation, any other key exits
+    // Read input: mouse events control rotation, any other key exits.
+    // Peek one byte first — only consume input if it's an escape (mouse).
+    // Non-escape bytes stay in the buffer so the shell gets the keypress.
     int should_break = 0;
     struct pollfd pfd = {.fd = STDIN_FILENO, .events = POLLIN};
     while (poll(&pfd, 1, 0) > 0) {
-      // Accumulate into a static buffer to handle partial escape reads
       static char ibuf[128];
       static int ibuf_len = 0;
+
+      // If buffer is empty, read first byte to check if it's a mouse escape
+      if (ibuf_len == 0) {
+        int n = read(STDIN_FILENO, ibuf, 1);
+        if (n <= 0) { should_break = 1; break; }
+        if (ibuf[0] != '\033') {
+          // Regular keypress — try to push it back so the shell gets it
+          ioctl(STDIN_FILENO, TIOCSTI, &ibuf[0]);
+          should_break = 1;
+          break;
+        }
+        ibuf_len = 1;
+      }
+
+      // Read more of the escape sequence
       int n = read(STDIN_FILENO, ibuf + ibuf_len, sizeof(ibuf) - ibuf_len);
-      if (n <= 0) { should_break = 1; break; }
-      ibuf_len += n;
+      if (n > 0) ibuf_len += n;
 
       int i = 0;
       while (i < ibuf_len) {
         if (ibuf[i] == '\033') {
-          // Check if we have enough for SGR mouse: \033[<btn;x;y[Mm]
-          if (i + 2 >= ibuf_len) break; // need more data
+          if (i + 2 >= ibuf_len) break;
           if (ibuf[i+1] == '[' && ibuf[i+2] == '<') {
             int j = i + 3;
             int btn = 0, mx = 0, my = 0;
             while (j < ibuf_len && ibuf[j] >= '0' && ibuf[j] <= '9')
               btn = btn * 10 + (ibuf[j++] - '0');
-            if (j >= ibuf_len) break; // need more
+            if (j >= ibuf_len) break;
             if (ibuf[j] == ';') j++;
             while (j < ibuf_len && ibuf[j] >= '0' && ibuf[j] <= '9')
               mx = mx * 10 + (ibuf[j++] - '0');
@@ -4269,7 +4285,6 @@ int main(int argc, char **argv) {
             }
             i = j;
           } else {
-            // Some other escape sequence, skip it
             i++;
             while (i < ibuf_len && ibuf[i] < 0x40) i++;
             if (i < ibuf_len) i++;
@@ -4279,7 +4294,6 @@ int main(int argc, char **argv) {
           break;
         }
       }
-      // Shift remaining partial data to front
       if (i > 0 && i < ibuf_len) {
         memmove(ibuf, ibuf + i, ibuf_len - i);
         ibuf_len -= i;
